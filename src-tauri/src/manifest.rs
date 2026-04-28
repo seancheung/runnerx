@@ -209,7 +209,7 @@ impl Manifest {
     }
 
     pub fn effective_lifecycle(&self) -> Lifecycle {
-        let from_platform = self.platform.as_ref().and_then(|p| {
+        let from_platform: Option<Lifecycle> = self.platform.as_ref().and_then(|p| {
             #[cfg(target_os = "windows")]
             {
                 p.windows.as_ref().and_then(|o| o.lifecycle.clone())

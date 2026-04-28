@@ -1,0 +1,41 @@
+name: 视频格式转换
+id: video-converter
+description: 使用 ffmpeg 将视频转换为 H.264 或 H.265 格式，可选择输出质量。
+version: "1.0.0"
+category: 媒体
+tags: [视频, ffmpeg, 转换]
+entry:
+  command: ./run.sh
+  shell: false
+inputs:
+  - id: input_file
+    type: file
+    label: 输入视频
+    description: 选择要转换的视频文件
+    required: true
+    accept: [".mp4", ".mov", ".mkv", ".avi", ".wmv", ".flv", ".webm", "rmvb"]
+  - id: codec
+    type: enum
+    label: 编码器
+    description: 输出视频编码格式
+    required: true
+    default: h264
+    options:
+      - { value: h264, label: "H.264" }
+      - { value: h265, label: "H.265" }
+  - id: quality
+    type: enum
+    label: 输出质量
+    description: 质量越高文件越大
+    required: true
+    default: medium
+    options:
+      - { value: low, label: "低 (快速，文件小)" }
+      - { value: medium, label: "中 (平衡)" }
+      - { value: high, label: "高 (最佳画质)" }
+outputs:
+  - id: output_file
+    type: file
+    label: 输出文件
+    save: true
+    accept: [".mp4"]

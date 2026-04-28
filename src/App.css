@@ -13,12 +13,26 @@
   --warn: #ffd43b;
   --ok: #51cf66;
   --info: #4dabf7;
+  --code-bg: #0e0f12;
+  --code-text: #e9ecef;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color-scheme: dark;
 }
 
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-elev: #f8f9fa;
+  --bg-elev-2: #e9ecef;
+  --border: #dee2e6;
+  --border-strong: #ced4da;
+  --text: #212529;
+  --text-dim: #495057;
+  --text-muted: #868e96;
+  color-scheme: light;
+}
+
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     --bg: #ffffff;
     --bg-elev: #f8f9fa;
     --bg-elev-2: #e9ecef;
@@ -27,6 +41,7 @@
     --text: #212529;
     --text-dim: #495057;
     --text-muted: #868e96;
+    color-scheme: light;
   }
 }
 
@@ -304,7 +319,8 @@ textarea {
 .progress-text { font-size: 11px; color: var(--text-muted); }
 
 .console {
-  background: #0e0f12;
+  background: var(--code-bg);
+  color: var(--code-text);
   border: 1px solid var(--border);
   border-radius: 6px;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -342,10 +358,10 @@ textarea {
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
-  background: #0e0f12;
+  background: var(--code-bg);
   padding: 8px;
   border-radius: 4px;
-  color: var(--text);
+  color: var(--code-text);
 }
 .result-card table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .result-card th, .result-card td {
@@ -422,7 +438,8 @@ textarea {
 .readme { font-size: 13px; line-height: 1.5; }
 .readme h1, .readme h2, .readme h3 { margin-top: 16px; }
 .readme pre {
-  background: #0e0f12;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 10px;
   border-radius: 4px;
   overflow-x: auto;

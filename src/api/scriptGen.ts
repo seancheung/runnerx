@@ -1,5 +1,7 @@
-import { chat, LlmError, type ChatMessage } from "./llm";
+import { chat, LlmError, type ChatDeltaKind, type ChatMessage } from "./llm";
 import type { LlmConfig } from "../types/config";
+
+export type Platform = "windows" | "macos" | "linux";
 
 export interface GeneratedFile {
   path: string;
@@ -12,6 +14,19 @@ export interface GeneratedScript {
   files: GeneratedFile[];
   rationale: string;
 }
+
+export function detectPlatform(): Platform {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("windows")) return "windows";
+  if (ua.includes("mac os x") || ua.includes("macintosh")) return "macos";
+  return "linux";
+}
+
+const PLATFORM_LABEL: Record<Platform, string> = {
+  windows: "Windows（PowerShell）",
+  macos: "macOS（bash 3.2）",
+  linux: "Linux（bash）",
+};
 
 const SYSTEM_PROMPT = `你是 runnerx 脚本作者助手。runnerx 是一个跨平台桌面应用（Tauri + React），按目录加载用户脚本，根据 \`manifest.yaml\` 渲染表单、执行命令、显示进度和结构化结果。
 
@@ -35,14 +50,14 @@ tags: [标签1, 标签2]
 icon: 相对路径（可选，PNG/SVG/JPG/WebP）
 readme: 相对路径（默认 README.md）
 
-entry:
+entry:                     # 必填，作为脚本的默认入口（通常是用户当前平台对应的命令）
   command: ./run.sh        # 入口命令
   args: ["--foo"]          # 可选附加参数
   shell: false             # 是否走 shell 解释
   cwd: "."                 # 工作目录
   argsMode: env            # env (默认) | argv | stdin-json
 
-# 平台覆盖（可选）
+# 平台覆盖（可选；只有需要跨平台时才加。每项都是对顶层 entry / lifecycle 的覆盖，不是替代）
 platform:
   windows:
     entry: { command: run.ps1, shell: true }
@@ -55,7 +70,7 @@ lifecycle:
   uninstall: { command: ./uninstall.sh }
   preRun:    { command: ./check.sh }
 
-# 沙盒（可选；声明后整个脚本跑在 docker 容器里）
+# 沙盒（可选；声明后整个脚本跑在 docker 容器里。默认不要加）
 sandbox:
   image: python:3.11-slim
 
@@ -122,9 +137,12 @@ options:
 
 # 平台与最佳实践
 
-- 默认目标平台 macOS 与 Linux（bash），Windows 用户可加 platform.windows 覆盖跑 PowerShell。
-- shell 脚本第一行写 shebang \`#!/usr/bin/env bash\`；用 \`set -euo pipefail\`。
-- 引用环境变量时大写，e.g. \`"\${RUNNERX_TITLE:-default}"\`。
+- **顶层 \`entry\` 必填**，作为脚本的默认入口；用户消息会注明当前平台，请把顶层 \`entry\` 写成在该平台原生可运行的命令。
+- **默认单平台**：除非用户在需求里明确要求"跨平台"/"多平台"/"Windows 和 macOS 都能跑"等，**否则不要写 \`platform\` 字段**，只生成针对当前平台的单平台脚本。
+- **默认不沙盒**：除非用户在需求里明确要求"沙盒"/"docker"/"容器隔离"/"sandbox"等，**否则不要写 \`sandbox\` 字段**，让脚本直接跑在宿主机上。
+- 跨平台脚本（仅在用户明确要求时）：仍然要写顶层 \`entry\`，再用 \`platform.windows\` / \`platform.macos\` / \`platform.linux\` 覆盖其它平台；\`platform.<os>.entry\` 只是覆盖，不能替代顶层 \`entry\`，缺失顶层 \`entry\` 会导致脚本加载失败。
+- bash 脚本第一行写 shebang \`#!/usr/bin/env bash\`；用 \`set -euo pipefail\`。Windows 平台用 \`run.ps1\`，配合 \`entry.shell: true\`。
+- 引用环境变量时大写，e.g. \`"\${RUNNERX_TITLE:-default}"\`（PowerShell 用 \`$env:RUNNERX_TITLE\`）。
 - 推进进度条：每步打印一行 \`@@runnerx progress {"value":<0~1>,"message":"..."}\`。
 - 写有意义的 description；分类放在 \`category\`，常见分类：媒体、数据、文件、系统、开发、示例。
 - macOS 自带 bash 是 **3.2**，不要用 4.x 才有的特性。
@@ -164,13 +182,26 @@ set -euo pipefail
 export async function generateScript(
   cfg: LlmConfig,
   description: string,
-  options: { signal?: AbortSignal; onDelta?: (chunk: string) => void } = {},
+  options: {
+    signal?: AbortSignal;
+    onDelta?: (chunk: string, kind: ChatDeltaKind) => void;
+    platform?: Platform;
+  } = {},
 ): Promise<GeneratedScript> {
+  const platform = options.platform ?? detectPlatform();
+  const platformLabel = PLATFORM_LABEL[platform];
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
-      content: `请帮我创建一个 runnerx 脚本，需求如下：\n\n${description.trim()}\n\n按照系统消息里的格式输出。`,
+      content:
+        `请帮我创建一个 runnerx 脚本，需求如下：\n\n${description.trim()}\n\n` +
+        `当前用户平台：${platformLabel}。请把顶层 entry 写成该平台原生可运行的命令。\n` +
+        `**不要**添加 \`platform\` 覆盖字段，除非上面的需求里明确要求"跨平台"/"多平台"/"Windows 和 macOS 都能跑"等多平台兼容；` +
+        `没有明确要求多平台时，只针对当前平台生成单平台脚本即可。\n` +
+        `**不要**添加 \`sandbox\` 字段，除非上面的需求里明确要求"沙盒"/"docker"/"容器隔离"/"sandbox"等；` +
+        `没有明确要求时，让脚本直接在宿主机上运行。\n\n` +
+        `按照系统消息里的格式输出。`,
     },
   ];
   const text = await chat(cfg, messages, {

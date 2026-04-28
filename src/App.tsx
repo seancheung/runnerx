@@ -6,7 +6,15 @@ import { SettingsModal } from "./components/SettingsModal";
 import { AiGenerateModal } from "./components/AiGenerateModal";
 import { ScriptDetail } from "./components/ScriptDetail";
 import { EMPTY_RUN, type RunSnapshot } from "./components/RunPanel";
-import { clearScriptsRoot, getScriptsRoot, setScriptsRoot } from "./store";
+import {
+  applyTheme,
+  clearScriptsRoot,
+  getScriptsRoot,
+  getTheme,
+  setScriptsRoot,
+  setTheme,
+  type ThemePreference,
+} from "./store";
 import type { FormValues } from "./components/DynamicForm";
 import type { RunEvent, ScriptInfo } from "./types/manifest";
 
@@ -18,6 +26,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAiGenerate, setShowAiGenerate] = useState(false);
   const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
+  const [theme, setThemeState] = useState<ThemePreference>("system");
   const [run, setRun] = useState<RunSnapshot>(EMPTY_RUN);
   const runRef = useRef<RunSnapshot>(EMPTY_RUN);
   runRef.current = run;
@@ -47,6 +56,17 @@ function App() {
       const initial = stored ?? (await api.defaultScriptsRoot());
       setRoot(initial);
     })();
+    (async () => {
+      const t = await getTheme();
+      setThemeState(t);
+      applyTheme(t);
+    })();
+  }, []);
+
+  const handleThemeChange = useCallback(async (t: ThemePreference) => {
+    setThemeState(t);
+    applyTheme(t);
+    await setTheme(t);
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -220,6 +240,8 @@ function App() {
       {showSettings && (
         <SettingsModal
           initialRoot={root}
+          theme={theme}
+          onThemeChange={handleThemeChange}
           onClose={() => setShowSettings(false)}
           onSave={saveSettings}
           onReset={resetSettings}

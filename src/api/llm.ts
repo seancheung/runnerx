@@ -5,15 +5,19 @@ export interface ChatMessage {
   content: string;
 }
 
+export type ChatDeltaKind = "text" | "thinking";
+
 export interface ChatOptions {
   signal?: AbortSignal;
   maxTokens?: number;
   /**
    * If provided, the request streams via SSE and `onDelta` fires for each
-   * incremental text chunk. The full concatenated text is still returned
-   * from `chat()` when streaming completes.
+   * incremental chunk. `kind` is "thinking" for reasoning/thought tokens
+   * (DeepSeek-Reasoner reasoning_content, OpenRouter reasoning, Gemini
+   * thought parts) and "text" for the final answer. Only "text" chunks
+   * are concatenated into the value returned from `chat()`.
    */
-  onDelta?: (chunk: string) => void;
+  onDelta?: (chunk: string, kind: ChatDeltaKind) => void;
 }
 
 export class LlmError extends Error {
@@ -154,11 +158,21 @@ async function chatOpenAI(
     if (ev.data === "[DONE]") break;
     let json: unknown;
     try { json = JSON.parse(ev.data); } catch { continue; }
-    const delta = (json as { choices?: { delta?: { content?: string } }[] })
-      ?.choices?.[0]?.delta?.content;
-    if (typeof delta === "string" && delta) {
-      acc += delta;
-      opts.onDelta!(delta);
+    const delta = (json as {
+      choices?: { delta?: {
+        content?: string;
+        reasoning_content?: string;
+        reasoning?: string;
+      } }[];
+    })?.choices?.[0]?.delta;
+    const reasoning = delta?.reasoning_content ?? delta?.reasoning;
+    if (typeof reasoning === "string" && reasoning) {
+      opts.onDelta!(reasoning, "thinking");
+    }
+    const content = delta?.content;
+    if (typeof content === "string" && content) {
+      acc += content;
+      opts.onDelta!(content, "text");
     }
   }
   if (!acc) {
@@ -216,10 +230,14 @@ async function chatAnthropic(
     if (ev.event === "content_block_delta") {
       let json: unknown;
       try { json = JSON.parse(ev.data); } catch { continue; }
-      const delta = (json as { delta?: { type?: string; text?: string } })?.delta;
+      const delta = (json as {
+        delta?: { type?: string; text?: string; thinking?: string };
+      })?.delta;
       if (delta?.type === "text_delta" && typeof delta.text === "string") {
         acc += delta.text;
-        opts.onDelta!(delta.text);
+        opts.onDelta!(delta.text, "text");
+      } else if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
+        opts.onDelta!(delta.thinking, "thinking");
       }
     } else if (ev.event === "error") {
       throw new LlmError("Anthropic 流错误", res.status, ev.data);
@@ -274,12 +292,16 @@ async function chatGoogle(
     let json: unknown;
     try { json = JSON.parse(ev.data); } catch { continue; }
     const parts = (json as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
+      candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
     })?.candidates?.[0]?.content?.parts ?? [];
     for (const p of parts) {
       if (typeof p.text === "string" && p.text) {
-        acc += p.text;
-        opts.onDelta!(p.text);
+        if (p.thought === true) {
+          opts.onDelta!(p.text, "thinking");
+        } else {
+          acc += p.text;
+          opts.onDelta!(p.text, "text");
+        }
       }
     }
   }

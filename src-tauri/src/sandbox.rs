@@ -52,10 +52,10 @@ fn installed_image_ref(script_id: &str) -> String {
 /// returns Ok; failures (no such container, daemon down) are silent.
 pub async fn cancel_container(run_id: &str) {
     let name = container_name(run_id);
-    let _ = Command::new("docker")
-        .args(["rm", "-f", &name])
-        .output()
-        .await;
+    let mut cmd = Command::new("docker");
+    cmd.args(["rm", "-f", &name]);
+    crate::runner::hide_console_window(&mut cmd);
+    let _ = cmd.output().await;
 }
 
 fn shell_quote(s: &str) -> String {

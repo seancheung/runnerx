@@ -15,6 +15,21 @@ use uuid::Uuid;
 pub const EVENT_RUN: &str = "run-event";
 const PROTOCOL_PREFIX: &str = "@@runnerx ";
 
+/// Suppress the console window that Windows would otherwise pop up when we
+/// launch a console-subsystem child (cmd.exe, sh, docker, native binaries).
+/// No-op on non-Windows hosts.
+pub(crate) fn hide_console_window(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = cmd;
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RunMode {
@@ -206,6 +221,7 @@ pub(crate) async fn spawn_event_stream(
     } else {
         command.stdin(Stdio::null());
     }
+    hide_console_window(command);
 
     let run_id = predetermined_run_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let (kill_tx, mut kill_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -436,6 +452,7 @@ fn build_base_command(spec: &CommandSpec, script_dir: &Path) -> Command {
         c
     };
     command.kill_on_drop(true);
+    hide_console_window(&mut command);
     command
 }
 

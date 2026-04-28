@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "../api";
+import type { ThemePreference } from "../store";
 import {
   DEFAULT_CONFIG,
   LLM_PROVIDER_DEFAULTS,
@@ -13,6 +14,8 @@ import {
 
 interface Props {
   initialRoot: string | null;
+  theme: ThemePreference;
+  onThemeChange: (theme: ThemePreference) => void;
   onClose: () => void;
   onSave: (root: string, config: AppConfig) => void;
   onReset: () => void;
@@ -25,7 +28,7 @@ const EMPTY_LLM: LlmConfig = {
   model: LLM_PROVIDER_DEFAULTS.openai.model,
 };
 
-export function SettingsModal({ initialRoot, onClose, onSave, onReset }: Props) {
+export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSave, onReset }: Props) {
   const [root, setRoot] = useState(initialRoot ?? "");
   const [defaultRoot, setDefaultRoot] = useState<string | null>(null);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
@@ -128,6 +131,33 @@ export function SettingsModal({ initialRoot, onClose, onSave, onReset }: Props) 
               </>
             )}
           </div>
+        </div>
+
+        <div className="field-section-title">外观</div>
+
+        <div className="field">
+          <label className="field-label">深色模式</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+            <RadioRow
+              checked={theme === "system"}
+              onChange={() => onThemeChange("system")}
+              label="跟随系统（默认）"
+              hint="根据系统外观自动切换"
+            />
+            <RadioRow
+              checked={theme === "dark"}
+              onChange={() => onThemeChange("dark")}
+              label="深色"
+              hint="始终使用深色界面"
+            />
+            <RadioRow
+              checked={theme === "light"}
+              onChange={() => onThemeChange("light")}
+              label="浅色"
+              hint="始终使用浅色界面"
+            />
+          </div>
+          <div className="field-desc">立即生效，无需保存。</div>
         </div>
 
         <div className="field-section-title">沙盒</div>

@@ -26,6 +26,7 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
   const [overwrite, setOverwrite] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [streamText, setStreamText] = useState("");
+  const [thinkingText, setThinkingText] = useState("");
   const phaseRef = useRef<Phase>(phase);
   phaseRef.current = phase;
 
@@ -54,14 +55,21 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
     if (!llm || !root) return;
     const ctrl = new AbortController();
     setStreamText("");
+    setThinkingText("");
     setPhase({ kind: "generating", abort: ctrl });
     let buffered = "";
+    let thinking = "";
     try {
       const script = await generateScript(llm, description, {
         signal: ctrl.signal,
-        onDelta: (chunk) => {
-          buffered += chunk;
-          setStreamText(buffered);
+        onDelta: (chunk, kind) => {
+          if (kind === "thinking") {
+            thinking += chunk;
+            setThinkingText(thinking);
+          } else {
+            buffered += chunk;
+            setStreamText(buffered);
+          }
         },
       });
       setPhase({ kind: "preview", script });
@@ -146,7 +154,15 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
             )}
 
             {phase.kind === "generating" && (
-              <StreamView text={streamText} />
+              <>
+                {thinkingText && (
+                  <StreamView text={thinkingText} title="AI 思考（流式）" muted />
+                )}
+                <StreamView
+                  text={streamText}
+                  placeholder={thinkingText ? "AI 思考中…" : "等待 AI 响应…"}
+                />
+              </>
             )}
             {phase.kind === "writing" && (
               <div className="field-desc" style={{ color: "var(--accent)" }}>
@@ -209,7 +225,17 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
   );
 }
 
-function StreamView({ text, title }: { text: string; title?: string }) {
+function StreamView({
+  text,
+  title,
+  placeholder,
+  muted = false,
+}: {
+  text: string;
+  title?: string;
+  placeholder?: string;
+  muted?: boolean;
+}) {
   const ref = useRef<HTMLPreElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -229,16 +255,19 @@ function StreamView({ text, title }: { text: string; title?: string }) {
           padding: "8px 10px",
           fontSize: 11,
           lineHeight: 1.45,
-          background: "#0e0f12",
+          background: "var(--code-bg)",
+          color: "var(--code-text)",
           border: "1px solid var(--border)",
           borderRadius: 6,
-          maxHeight: 280,
+          maxHeight: muted ? 200 : 280,
           overflow: "auto",
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
+          opacity: muted ? 0.7 : 1,
+          fontStyle: muted ? "italic" : "normal",
         }}
       >
-        {text || "等待 AI 响应…"}
+        {text || placeholder || "等待 AI 响应…"}
         {text && <span style={{ color: "var(--accent)" }}>▍</span>}
       </pre>
     </div>
@@ -306,7 +335,8 @@ function PreviewBlock({
                 padding: "8px 10px",
                 fontSize: 11,
                 lineHeight: 1.45,
-                background: "#0e0f12",
+                background: "var(--code-bg)",
+                color: "var(--code-text)",
                 borderTop: "1px solid var(--border)",
                 maxHeight: 320,
                 overflow: "auto",
