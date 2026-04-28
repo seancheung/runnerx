@@ -3,6 +3,7 @@ import "./App.css";
 import * as api from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsModal } from "./components/SettingsModal";
+import { AiGenerateModal } from "./components/AiGenerateModal";
 import { ScriptDetail } from "./components/ScriptDetail";
 import { EMPTY_RUN, type RunSnapshot } from "./components/RunPanel";
 import { clearScriptsRoot, getScriptsRoot, setScriptsRoot } from "./store";
@@ -15,6 +16,8 @@ function App() {
   const [scanErrors, setScanErrors] = useState<{ dir: string; message: string }[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAiGenerate, setShowAiGenerate] = useState(false);
+  const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
   const [run, setRun] = useState<RunSnapshot>(EMPTY_RUN);
   const runRef = useRef<RunSnapshot>(EMPTY_RUN);
   runRef.current = run;
@@ -48,14 +51,20 @@ function App() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Auto-select first script when list changes
+  // Auto-select first script when list changes (or honor a pending selection
+  // requested by the AI generate flow).
   useEffect(() => {
+    if (pendingSelectId && scripts.find((s) => s.id === pendingSelectId)) {
+      setSelectedId(pendingSelectId);
+      setPendingSelectId(null);
+      return;
+    }
     if (scripts.length > 0 && !scripts.find((s) => s.id === selectedId)) {
       setSelectedId(scripts[0].id);
     } else if (scripts.length === 0) {
       setSelectedId(null);
     }
-  }, [scripts, selectedId]);
+  }, [scripts, selectedId, pendingSelectId]);
 
   const handleRunEvent = useCallback((evt: RunEvent) => {
     setRun((prev) => {
@@ -182,6 +191,7 @@ function App() {
         }}
         onOpenSettings={() => setShowSettings(true)}
         onRefresh={refresh}
+        onOpenAiGenerate={() => setShowAiGenerate(true)}
       />
       <main style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {scanErrors.length > 0 && (
@@ -213,6 +223,16 @@ function App() {
           onClose={() => setShowSettings(false)}
           onSave={saveSettings}
           onReset={resetSettings}
+        />
+      )}
+      {showAiGenerate && (
+        <AiGenerateModal
+          root={root}
+          onClose={() => setShowAiGenerate(false)}
+          onCreated={(_dir, id) => {
+            setPendingSelectId(id);
+            refresh();
+          }}
         />
       )}
     </div>

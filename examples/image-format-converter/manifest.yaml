@@ -1,0 +1,43 @@
+name: Image Format Converter
+id: image-format-converter
+description: Convert images between common formats using ImageMagick.
+version: 1.0.0
+category: 媒体
+tags: [image, conversion, imagemagick]
+entry:
+  command: ./run.sh
+inputs:
+  - id: input_file
+    type: file
+    label: Input Image
+    description: Select the image file to convert.
+    required: true
+    accept: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"]
+  - id: output_format
+    type: enum
+    label: Output Format
+    description: Choose the target image format.
+    required: true
+    options:
+      - { value: jpg, label: JPEG }
+      - { value: png, label: PNG }
+      - { value: gif, label: GIF }
+      - { value: webp, label: WebP }
+      - { value: bmp, label: BMP }
+      - { value: tiff, label: TIFF }
+  - id: quality
+    type: number
+    label: Quality
+    description: Output quality (1-100), only for lossy formats like JPEG and WebP.
+    required: false
+    default: 90
+    min: 1
+    max: 100
+    integer: true
+outputs:
+  - id: output_file
+    type: file
+    label: Save Converted Image As
+    description: Location to save the converted image.
+    save: true
+    accept: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"]

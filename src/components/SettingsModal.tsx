@@ -1,7 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import * as api from "../api";
-import { DEFAULT_CONFIG, type AppConfig, type SandboxNetwork } from "../types/config";
+import {
+  DEFAULT_CONFIG,
+  LLM_PROVIDER_DEFAULTS,
+  LLM_PROVIDER_LABELS,
+  type AppConfig,
+  type LlmConfig,
+  type LlmProvider,
+  type SandboxNetwork,
+} from "../types/config";
 
 interface Props {
   initialRoot: string | null;
@@ -10,17 +18,35 @@ interface Props {
   onReset: () => void;
 }
 
+const EMPTY_LLM: LlmConfig = {
+  provider: "openai",
+  apiKey: "",
+  baseUrl: LLM_PROVIDER_DEFAULTS.openai.baseUrl,
+  model: LLM_PROVIDER_DEFAULTS.openai.model,
+};
+
 export function SettingsModal({ initialRoot, onClose, onSave, onReset }: Props) {
   const [root, setRoot] = useState(initialRoot ?? "");
   const [defaultRoot, setDefaultRoot] = useState<string | null>(null);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [initialConfig, setInitialConfig] = useState<AppConfig>(DEFAULT_CONFIG);
+  const [llmEnabled, setLlmEnabled] = useState(false);
+  const [llm, setLlm] = useState<LlmConfig>(EMPTY_LLM);
 
   useEffect(() => {
     api.defaultScriptsRoot().then(setDefaultRoot).catch(() => setDefaultRoot(null));
     api.getConfig().then((c) => {
       setConfig(c);
       setInitialConfig(c);
+      if (c.llm) {
+        setLlmEnabled(true);
+        setLlm({
+          provider: c.llm.provider,
+          apiKey: c.llm.apiKey ?? "",
+          baseUrl: c.llm.baseUrl ?? LLM_PROVIDER_DEFAULTS[c.llm.provider].baseUrl,
+          model: c.llm.model ?? LLM_PROVIDER_DEFAULTS[c.llm.provider].model,
+        });
+      }
     }).catch(() => {});
   }, []);
 
@@ -33,14 +59,42 @@ export function SettingsModal({ initialRoot, onClose, onSave, onReset }: Props) 
     setConfig((c) => ({ ...c, sandbox: { ...c.sandbox, network } }));
   };
 
+  const onProviderChange = (provider: LlmProvider) => {
+    const def = LLM_PROVIDER_DEFAULTS[provider];
+    setLlm((prev) => ({
+      provider,
+      apiKey: prev.apiKey,
+      baseUrl: def.baseUrl,
+      model: def.model || prev.model,
+    }));
+  };
+
+  const effectiveLlm = useMemo<LlmConfig | null>(() => {
+    if (!llmEnabled) return null;
+    return {
+      provider: llm.provider,
+      apiKey: llm.apiKey.trim(),
+      baseUrl: llm.baseUrl.trim(),
+      model: llm.model.trim(),
+    };
+  }, [llmEnabled, llm]);
+
   const isAtDefault = defaultRoot != null && root.trim() === defaultRoot;
   const rootChanged = root.trim() !== (initialRoot ?? "");
-  const configChanged = JSON.stringify(config) !== JSON.stringify(initialConfig);
+  const mergedConfig: AppConfig = { ...config, llm: effectiveLlm };
+  const configChanged = JSON.stringify(mergedConfig) !== JSON.stringify(initialConfig);
   const dirty = rootChanged || configChanged;
+
+  const llmInvalid =
+    llmEnabled && (!llm.apiKey.trim() || !llm.model.trim() || !llm.baseUrl.trim());
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxHeight: "85vh", overflowY: "auto" }}
+      >
         <h3>设置</h3>
 
         <div className="field">
@@ -52,6 +106,18 @@ export function SettingsModal({ initialRoot, onClose, onSave, onReset }: Props) 
               placeholder="/path/to/your/scripts"
             />
             <button type="button" onClick={browse}>浏览…</button>
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={isAtDefault}
+              title={
+                isAtDefault
+                  ? "脚本目录已是默认位置"
+                  : "清除自定义脚本目录路径，回到默认位置（直接生效，无需保存）"
+              }
+            >
+              恢复默认
+            </button>
           </div>
           <div className="field-desc">
             根目录下的每个子目录如果包含 <code>manifest.yaml</code> 就被识别为一个脚本。
@@ -93,26 +159,85 @@ export function SettingsModal({ initialRoot, onClose, onSave, onReset }: Props) 
           </div>
         </div>
 
+        <div className="field-section-title">AI 模型</div>
+
+        <label
+          className="field-checkbox"
+          style={{ marginBottom: 10 }}
+        >
+          <input
+            type="checkbox"
+            checked={llmEnabled}
+            onChange={(e) => setLlmEnabled(e.target.checked)}
+          />
+        </label>
+
+        {llmEnabled && (
+          <>
+            <div className="field">
+              <label className="field-label">服务商</label>
+              <select
+                value={llm.provider}
+                onChange={(e) => onProviderChange(e.target.value as LlmProvider)}
+              >
+                {(Object.keys(LLM_PROVIDER_LABELS) as LlmProvider[]).map((p) => (
+                  <option key={p} value={p}>{LLM_PROVIDER_LABELS[p]}</option>
+                ))}
+              </select>
+              <div className="field-desc">
+                想接 OpenRouter / Together / Groq / 本地 Ollama 等 OpenAI 兼容服务，选 OpenAI 后改 Base URL 即可。
+              </div>
+            </div>
+
+            <div className="field">
+              <label className="field-label">API Key</label>
+              <input
+                type="password"
+                value={llm.apiKey}
+                onChange={(e) => setLlm((p) => ({ ...p, apiKey: e.target.value }))}
+                placeholder="sk-..."
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <div className="field-desc">
+                密钥保存在 <code>~/.runnerx/config.yaml</code>，不会上传到任何地方（直接由本应用调用 API）。
+              </div>
+            </div>
+
+            <div className="field">
+              <label className="field-label">Base URL</label>
+              <input
+                value={llm.baseUrl}
+                onChange={(e) => setLlm((p) => ({ ...p, baseUrl: e.target.value }))}
+                placeholder={LLM_PROVIDER_DEFAULTS[llm.provider].baseUrl}
+              />
+            </div>
+
+            <div className="field">
+              <label className="field-label">模型</label>
+              <input
+                value={llm.model}
+                onChange={(e) => setLlm((p) => ({ ...p, model: e.target.value }))}
+                placeholder={LLM_PROVIDER_DEFAULTS[llm.provider].model || "model-name"}
+              />
+              <div className="field-desc">
+                {llm.provider === "openai" && "如 gpt-4o-mini, gpt-4o, o1-mini"}
+                {llm.provider === "google" && "如 gemini-2.5-flash, gemini-2.5-pro"}
+                {llm.provider === "anthropic" && "如 claude-sonnet-4-5, claude-opus-4-5"}
+                {llm.provider === "deepseek" && "如 deepseek-chat, deepseek-reasoner"}
+              </div>
+            </div>
+          </>
+        )}
+
         <div className="modal-actions">
-          <button
-            type="button"
-            onClick={onReset}
-            disabled={isAtDefault}
-            title={
-              isAtDefault
-                ? "脚本目录已是默认位置"
-                : "清除自定义脚本目录路径，回到默认位置（直接生效，无需保存）"
-            }
-            style={{ marginRight: "auto" }}
-          >
-            恢复默认目录
-          </button>
           <button type="button" onClick={onClose}>取消</button>
           <button
             type="button"
             className="primary"
-            onClick={() => onSave(root.trim(), config)}
-            disabled={!root.trim() || !dirty}
+            onClick={() => onSave(root.trim(), mergedConfig)}
+            disabled={!root.trim() || !dirty || llmInvalid}
+            title={llmInvalid ? "AI 配置不完整" : undefined}
           >
             保存
           </button>

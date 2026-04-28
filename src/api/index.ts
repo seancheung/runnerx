@@ -66,3 +66,20 @@ export async function currentRun(): Promise<string | null> {
 export async function onRunEvent(handler: (e: RunEvent) => void): Promise<UnlistenFn> {
   return await listen<RunEvent>(RUN_EVENT, (msg) => handler(msg.payload));
 }
+
+export interface WriteFileSpec {
+  path: string;
+  content: string;
+  executable?: boolean;
+}
+
+export async function writeScriptFiles(
+  root: string,
+  scriptId: string,
+  files: WriteFileSpec[],
+  overwrite = false,
+): Promise<string> {
+  return await invoke<string>("write_script_files", {
+    request: { root, scriptId, files, overwrite },
+  });
+}

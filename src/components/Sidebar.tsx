@@ -8,9 +8,17 @@ interface Props {
   onSelect: (id: string) => void;
   onOpenSettings: () => void;
   onRefresh: () => void;
+  onOpenAiGenerate: () => void;
 }
 
-export function Sidebar({ scripts, selectedId, onSelect, onOpenSettings, onRefresh }: Props) {
+export function Sidebar({
+  scripts,
+  selectedId,
+  onSelect,
+  onOpenSettings,
+  onRefresh,
+  onOpenAiGenerate,
+}: Props) {
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -42,6 +50,13 @@ export function Sidebar({ scripts, selectedId, onSelect, onOpenSettings, onRefre
         <div className="sidebar-title">
           <span>runnerx</span>
           <div style={{ display: "flex", gap: 4 }}>
+            <button
+              title="AI 创建脚本"
+              onClick={onOpenAiGenerate}
+              style={{ padding: "2px 8px", fontSize: 11 }}
+            >
+              AI
+            </button>
             <button title="刷新" onClick={onRefresh} style={{ padding: "2px 8px", fontSize: 11 }}>↻</button>
             <button title="设置" onClick={onOpenSettings} style={{ padding: "2px 8px", fontSize: 11 }}>⚙</button>
           </div>

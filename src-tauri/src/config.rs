@@ -7,6 +7,29 @@ use std::path::PathBuf;
 #[serde(rename_all = "camelCase", default)]
 pub struct AppConfig {
     pub sandbox: SandboxConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub llm: Option<LlmConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmConfig {
+    pub provider: LlmProvider,
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub model: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum LlmProvider {
+    Openai,
+    Google,
+    Anthropic,
+    Deepseek,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

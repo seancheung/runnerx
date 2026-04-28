@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::path::{Component, PathBuf};
 use std::sync::Arc;
 
 use crate::error::{Result, RxError};
 use crate::manifest::Manifest;
 use crate::runner::{self, RunRequest, RunnerState};
 use crate::scanner::{self, ScanError, ScriptInfo};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
 #[derive(Serialize)]
@@ -151,4 +151,69 @@ pub fn set_config(config: crate::config::AppConfig) -> Result<()> {
 #[tauri::command]
 pub fn validate_manifest(yaml: String) -> Result<Manifest> {
     Ok(serde_yaml::from_str(&yaml)?)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteFile {
+    pub path: String,
+    pub content: String,
+    #[serde(default)]
+    pub executable: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteScriptRequest {
+    pub root: String,
+    pub script_id: String,
+    pub files: Vec<WriteFile>,
+    #[serde(default)]
+    pub overwrite: bool,
+}
+
+/// Write an AI-generated script into <root>/<scriptId>/. The id and each file
+/// path are sanitized to forbid traversal; on Unix files marked `executable`
+/// get 0755.
+#[tauri::command]
+pub fn write_script_files(request: WriteScriptRequest) -> Result<String> {
+    let id = request.script_id.trim();
+    if id.is_empty()
+        || id.starts_with('.')
+        || id.contains(['/', '\\', '\0'])
+        || id == "." || id == ".."
+    {
+        return Err(RxError::Other(format!("非法脚本 id：{id}")));
+    }
+    let root = PathBuf::from(&request.root);
+    if !root.is_dir() {
+        return Err(RxError::Other(format!("脚本根目录不存在：{}", root.display())));
+    }
+    let target = root.join(id);
+    if target.exists() && !request.overwrite {
+        return Err(RxError::Other(format!("目录已存在：{}", target.display())));
+    }
+    std::fs::create_dir_all(&target)?;
+
+    for file in &request.files {
+        let rel = PathBuf::from(&file.path);
+        if rel.is_absolute()
+            || rel.components().any(|c| matches!(c, Component::ParentDir))
+            || file.path.contains('\0')
+        {
+            return Err(RxError::Other(format!("非法文件路径：{}", file.path)));
+        }
+        let full = target.join(&rel);
+        if let Some(parent) = full.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&full, &file.content)?;
+        #[cfg(unix)]
+        if file.executable {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o755);
+            std::fs::set_permissions(&full, perms)?;
+        }
+    }
+    Ok(target.display().to_string())
 }

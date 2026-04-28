@@ -34,6 +34,7 @@ pub fn run() {
             commands::validate_manifest,
             commands::get_config,
             commands::set_config,
+            commands::write_script_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
