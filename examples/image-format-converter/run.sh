@@ -59,7 +59,7 @@ if [[ "${OUTPUT_FORMAT}" == "jpg" || "${OUTPUT_FORMAT}" == "webp" ]]; then
   QUALITY_ARG=("-quality" "${QUALITY}")
 fi
 
-if "${IM_CMD}" "${INPUT_FILE}" "${QUALITY_ARG[@]}" "${OUTPUT_FILE}"; then
+if "${IM_CMD}" "${INPUT_FILE}" ${QUALITY_ARG[@]+"${QUALITY_ARG[@]}"} "${OUTPUT_FILE}"; then
   echo "@@runnerx progress {\"value\": 0.9, \"message\": \"Conversion done.\"}"
   echo "@@runnerx result {\"type\": \"image\", \"path\": \"${OUTPUT_FILE}\", \"label\": \"Converted Image\"}"
   echo "@@runnerx result {\"type\": \"file\", \"path\": \"${OUTPUT_FILE}\", \"label\": \"Download Converted Image\"}"

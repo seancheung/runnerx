@@ -127,6 +127,7 @@ options:
 - 引用环境变量时大写，e.g. \`"\${RUNNERX_TITLE:-default}"\`。
 - 推进进度条：每步打印一行 \`@@runnerx progress {"value":<0~1>,"message":"..."}\`。
 - 写有意义的 description；分类放在 \`category\`，常见分类：媒体、数据、文件、系统、开发、示例。
+- macOS 自带 bash 是 **3.2**，不要用 4.x 才有的特性。
 
 # 输出格式 — 重要
 
