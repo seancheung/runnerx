@@ -14,6 +14,7 @@
 - [脚本 ↔ 应用通信协议](#脚本--应用通信协议)
 - [生命周期](#生命周期)
 - [参数传递模式](#参数传递模式)
+- [沙盒模式 (Docker)](#沙盒模式-docker)
 - [示例脚本](#示例脚本)
 
 ---
@@ -182,6 +183,40 @@ platform:
 
 ---
 
+## 沙盒模式 (Docker)
+
+在 manifest 顶部加 **`sandbox.image`** 一个字段，整个脚本就跑在 Docker 容器里——不影响其它字段写法（entry / lifecycle / inputs / outputs 都和 host 模式一样）。
+
+```yaml
+sandbox:
+  image: python:3.11-slim   # 必填，唯一的沙盒字段
+```
+
+### 行为约定
+
+| 阶段 | runnerx 做的事 |
+|---|---|
+| **install** | `docker pull <base>` → 启临时容器 → 把脚本目录 cp 到容器内 `/runnerx/work` → cwd=`/runnerx/work` 跑 install.sh → `docker commit` 到 `runnerx-script-<id>:installed` |
+| **run** | 从 installed image 启 `--rm` 容器 → 自动挂载 `file`/`files`/`directory` 输入到 `/runnerx/in/<id>` (**强制 ro**) → output 临时目录挂到 `/runnerx/out/<id>` (rw, 完成后搬回用户选的 host 路径) → `--network=<setting>`、cwd=`/runnerx/work` → entry 走 `sh -c` |
+| **uninstall** | 跑用户的 uninstall.sh（在容器里）→ `docker rmi` installed image。**base image 不会被删**——多个脚本可能共享同一 base，要清理用 `docker rmi <base>` 自己处理 |
+| **cancel** | `docker rm -f` 容器 |
+
+### 关键约束
+
+- **mount 全部 ro**，没有 `writable: true` 选项。要让脚本"产出"文件，用 `outputs` 声明（output 会挂 rw 临时目录中转）。
+- **网络**：install 阶段恒为 bridge（要拉镜像 / pip / apt）；run 阶段从全局配置读，默认 `bridge`。设置面板可改成 `none`（完全隔离）或 `host`（共享宿主机网络）。配置写到 `~/.runnerx/config.yaml`，可手动编辑。
+- **路径环境变量自动翻译**：脚本看到的是容器路径（`/runnerx/in/foo`），不是 host 路径。这是隔离的目的。
+- **改源代码要 reinstall**：image 是状态。脚本目录改了不会自动同步进容器，必须再点一次安装来 commit 新 image。
+
+### 前置
+
+需要 Docker daemon 在跑（macOS / Windows 装 Docker Desktop，Linux 原生 docker 或 colima 都行）。runnerx 通过命令行 `docker` 调用，没有走 socket SDK，所以装哪个 docker daemon 都行。
+
+### 何时不用沙盒模式
+
+- 自己写的脚本、自己机器上跑——纯 host 模式更轻、改一行立即生效。
+- 沙盒主要用在：**接收别人的脚本**、**怕脚本写坏 host fs**、**不同脚本依赖冲突想完全隔离**。
+
 ## 示例脚本
 
 仓库自带 `examples/` 目录，**可以直接把它当作 scripts root 使用**：
@@ -191,5 +226,6 @@ platform:
 - `python-batch-rename` — 演示 `install` lifecycle（创建 venv）+ `argsMode: stdin-json`。
 - `pwsh-file-stats` — PowerShell 入门：演示 `platform` 字段差异化（Windows 用自带 `powershell.exe`，其它平台用 `pwsh`），以及手动构造 JSON 协议（绕开 PS 5.1 `ConvertTo-Json` 的嵌套数组限制）。
 - `archive-folder` — 真跨平台示例：**同一个 manifest，macOS 走 `run.sh` + `zip`，Windows 走 `run.ps1` + `Compress-Archive`**。两套独立实现，相同输入产出等价的 zip。
+- `archive-folder-sandboxed` — 沙盒模式示例：和 `archive-folder` 同样把目录打包为 zip，但跑在 `alpine:3.20` 容器里，install 时 `apk add zip`。这个场景天然契合沙盒（输入 ro 读取 + 输出 rw 中转）。
 
 启动应用后在设置里把脚本目录指到本仓库的 `examples/` 即可立即试用。

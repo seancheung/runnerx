@@ -14,6 +14,15 @@
     "category": { "type": "string" },
     "tags": { "type": "array", "items": { "type": "string" } },
     "readme": { "type": "string", "description": "Path to a markdown readme. Defaults to README.md if present." },
+    "sandbox": {
+      "type": "object",
+      "required": ["image"],
+      "additionalProperties": false,
+      "description": "When set, the script runs inside a Docker container instead of on the host.",
+      "properties": {
+        "image": { "type": "string", "minLength": 1, "description": "Base Docker image (e.g. python:3.11-slim, node:20-alpine)." }
+      }
+    },
     "entry": { "$ref": "#/definitions/entry" },
     "platform": {
       "type": "object",

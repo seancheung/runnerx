@@ -136,11 +136,11 @@ function App() {
     }
   }, [selected]);
 
-  const startUninstall = useCallback(async () => {
+  const startUninstall = useCallback(async (alsoRemoveBase: boolean) => {
     if (!selected) return;
     setRun({ ...EMPTY_RUN, status: "running", mode: "uninstall" });
     try {
-      await api.runUninstall(selected.dir);
+      await api.runUninstall(selected.dir, alsoRemoveBase);
     } catch (e) {
       setRun((prev) => ({ ...prev, status: "error", error: String(e) }));
     }
@@ -157,8 +157,9 @@ function App() {
     refresh();
   }, [selected, refresh]);
 
-  const saveSettings = useCallback(async (newRoot: string) => {
+  const saveSettings = useCallback(async (newRoot: string, newConfig: import("./types/config").AppConfig) => {
     await setScriptsRoot(newRoot);
+    await api.setConfig(newConfig);
     setRoot(newRoot);
     setShowSettings(false);
   }, []);

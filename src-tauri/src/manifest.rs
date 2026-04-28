@@ -157,6 +157,13 @@ pub struct OutputSpec {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Sandbox {
+    /// Base Docker image (pulled at install time, layered into installed image).
+    pub image: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Manifest {
     pub name: String,
     pub id: Option<String>,
@@ -167,6 +174,10 @@ pub struct Manifest {
     #[serde(default)]
     pub tags: Vec<String>,
     pub readme: Option<String>,
+    /// When set, the script runs inside Docker. The only sandbox-specific manifest
+    /// surface is the image; everything else (entry, lifecycle, inputs, outputs)
+    /// works the same way it does on the host.
+    pub sandbox: Option<Sandbox>,
     pub entry: EntrySpec,
     pub platform: Option<Platform>,
     pub lifecycle: Option<Lifecycle>,

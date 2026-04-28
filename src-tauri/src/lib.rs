@@ -1,7 +1,9 @@
 mod commands;
+mod config;
 mod error;
 mod manifest;
 mod runner;
+mod sandbox;
 mod scanner;
 
 use std::sync::Arc;
@@ -25,10 +27,13 @@ pub fn run() {
             commands::run_script,
             commands::run_install,
             commands::run_uninstall,
+            commands::run_uninstall_with_base,
             commands::cancel_run,
             commands::current_run,
             commands::manifest_schema,
             commands::validate_manifest,
+            commands::get_config,
+            commands::set_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -70,6 +70,10 @@ pub async fn cancel(state: &RunnerState, run_id: &str) -> Result<()> {
             let _ = active.kill_tx.send(()).await;
         }
     }
+    drop(guard);
+    // Best-effort: also kill any sandbox container that follows our naming convention.
+    // Cheap: a docker call when no container exists just returns non-zero, no harm.
+    crate::sandbox::cancel_container(run_id).await;
     Ok(())
 }
 
@@ -81,6 +85,10 @@ pub async fn spawn_run(
     inputs: HashMap<String, Value>,
     outputs: HashMap<String, Value>,
 ) -> Result<String> {
+    if manifest.sandbox.is_some() {
+        return crate::sandbox::spawn_sandbox_run(app, state, manifest, script_dir, inputs, outputs).await;
+    }
+
     let entry = manifest.effective_entry();
     let cwd = resolve_cwd(&script_dir, entry.cwd.as_deref());
 
@@ -91,7 +99,7 @@ pub async fn spawn_run(
     };
 
     let mut command = build_command(&entry, &script_dir, &inputs, &outputs, &manifest.inputs)?;
-    spawn_event_stream(app, state, &mut command, &cwd, stdin_payload, RunMode::Script, None).await
+    spawn_event_stream(app, state, &mut command, &cwd, stdin_payload, RunMode::Script, None, None, None).await
 }
 
 pub async fn spawn_install(
@@ -100,19 +108,30 @@ pub async fn spawn_install(
     manifest: Manifest,
     script_dir: PathBuf,
 ) -> Result<String> {
+    if manifest.sandbox.is_some() {
+        return crate::sandbox::spawn_sandbox_install(app, state, manifest, script_dir).await;
+    }
+
     let lifecycle = manifest.effective_lifecycle();
     let install = lifecycle
         .install
         .ok_or_else(|| RxError::Other("no install lifecycle defined".into()))?;
     let cwd = resolve_cwd(&script_dir, install.cwd.as_deref());
     let mut command = build_base_command(&install, &script_dir);
-    let marker = crate::scanner::installed_marker_path(&script_dir);
+    let dir_clone = script_dir.clone();
     let on_exit: BoxedExitHook = Box::new(move |code, cancelled| {
         if !cancelled && code == Some(0) {
-            let _ = std::fs::write(&marker, b"installed by runnerx\n");
+            let state = crate::scanner::InstallState {
+                version: 1,
+                kind: crate::scanner::InstallKind::Host,
+                image: None,
+                base_image: None,
+                installed_at: Some(crate::scanner::current_iso_timestamp()),
+            };
+            let _ = crate::scanner::write_install_state(&dir_clone, &state);
         }
     });
-    spawn_event_stream(app, state, &mut command, &cwd, None, RunMode::Install, Some(on_exit)).await
+    spawn_event_stream(app, state, &mut command, &cwd, None, RunMode::Install, Some(on_exit), None, None).await
 }
 
 pub async fn spawn_uninstall(
@@ -120,20 +139,25 @@ pub async fn spawn_uninstall(
     state: Arc<RunnerState>,
     manifest: Manifest,
     script_dir: PathBuf,
+    also_remove_base: bool,
 ) -> Result<String> {
+    if manifest.sandbox.is_some() {
+        return crate::sandbox::spawn_sandbox_uninstall(app, state, manifest, script_dir, also_remove_base).await;
+    }
+
     let lifecycle = manifest.effective_lifecycle();
     let uninstall = lifecycle
         .uninstall
         .ok_or_else(|| RxError::Other("no uninstall lifecycle defined".into()))?;
     let cwd = resolve_cwd(&script_dir, uninstall.cwd.as_deref());
     let mut command = build_base_command(&uninstall, &script_dir);
-    let marker = crate::scanner::installed_marker_path(&script_dir);
+    let dir_clone = script_dir.clone();
     let on_exit: BoxedExitHook = Box::new(move |code, cancelled| {
         if !cancelled && code == Some(0) {
-            let _ = std::fs::remove_file(&marker);
+            let _ = crate::scanner::clear_install_state(&dir_clone);
         }
     });
-    spawn_event_stream(app, state, &mut command, &cwd, None, RunMode::Uninstall, Some(on_exit)).await
+    spawn_event_stream(app, state, &mut command, &cwd, None, RunMode::Uninstall, Some(on_exit), None, None).await
 }
 
 pub async fn run_pre_run_sync(manifest: &Manifest, script_dir: &Path) -> Result<()> {
@@ -150,9 +174,9 @@ pub async fn run_pre_run_sync(manifest: &Manifest, script_dir: &Path) -> Result<
     Ok(())
 }
 
-type BoxedExitHook = Box<dyn FnOnce(Option<i32>, bool) + Send + 'static>;
+pub(crate) type BoxedExitHook = Box<dyn FnOnce(Option<i32>, bool) + Send + 'static>;
 
-async fn spawn_event_stream(
+pub(crate) async fn spawn_event_stream(
     app: AppHandle,
     state: Arc<RunnerState>,
     command: &mut Command,
@@ -160,6 +184,11 @@ async fn spawn_event_stream(
     stdin_payload: Option<String>,
     mode: RunMode,
     on_exit: Option<BoxedExitHook>,
+    predetermined_run_id: Option<String>,
+    // container_path -> host_path translation for `result` payloads emitted
+    // by sandboxed scripts; the script reports container-side paths because
+    // that's what it sees, but the frontend needs host paths to reveal the file.
+    result_path_map: Option<HashMap<String, String>>,
 ) -> Result<String> {
     {
         let guard = state.active.lock().await;
@@ -178,7 +207,7 @@ async fn spawn_event_stream(
         command.stdin(Stdio::null());
     }
 
-    let run_id = Uuid::new_v4().to_string();
+    let run_id = predetermined_run_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let (kill_tx, mut kill_rx) = tokio::sync::mpsc::channel::<()>(1);
     {
         let mut guard = state.active.lock().await;
@@ -200,23 +229,26 @@ async fn spawn_event_stream(
 
     let _ = app.emit(EVENT_RUN, RunEvent::Started { run_id: run_id.clone(), mode });
 
+    let path_map = Arc::new(result_path_map.unwrap_or_default());
     let app_for_out = app.clone();
     let id_for_out = run_id.clone();
+    let map_for_out = path_map.clone();
     let stdout_task = tokio::spawn(async move {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            emit_line(&app_for_out, &id_for_out, &line, true);
+            emit_line(&app_for_out, &id_for_out, &line, true, &map_for_out);
         }
     });
 
     let app_for_err = app.clone();
     let id_for_err = run_id.clone();
+    let map_for_err = path_map.clone();
     let stderr_task = tokio::spawn(async move {
         let reader = BufReader::new(stderr);
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            emit_line(&app_for_err, &id_for_err, &line, false);
+            emit_line(&app_for_err, &id_for_err, &line, false, &map_for_err);
         }
     });
 
@@ -255,7 +287,13 @@ async fn spawn_event_stream(
     Ok(run_id)
 }
 
-fn emit_line(app: &AppHandle, run_id: &str, line: &str, is_stdout: bool) {
+fn emit_line(
+    app: &AppHandle,
+    run_id: &str,
+    line: &str,
+    is_stdout: bool,
+    path_map: &HashMap<String, String>,
+) {
     if let Some(rest) = line.strip_prefix(PROTOCOL_PREFIX) {
         let mut split = rest.splitn(2, char::is_whitespace);
         let kind = split.next().unwrap_or("").trim();
@@ -274,7 +312,10 @@ fn emit_line(app: &AppHandle, run_id: &str, line: &str, is_stdout: bool) {
                 let _ = app.emit(EVENT_RUN, RunEvent::Log { run_id: run_id.into(), level, message });
                 return;
             }
-            ("result", Some(v)) => {
+            ("result", Some(mut v)) => {
+                if !path_map.is_empty() {
+                    translate_result_paths(&mut v, path_map);
+                }
                 let _ = app.emit(EVENT_RUN, RunEvent::Result { run_id: run_id.into(), payload: v });
                 return;
             }
@@ -287,6 +328,37 @@ fn emit_line(app: &AppHandle, run_id: &str, line: &str, is_stdout: bool) {
         RunEvent::Stderr { run_id: run_id.into(), line: line.into() }
     };
     let _ = app.emit(EVENT_RUN, event);
+}
+
+/// Replace `path` fields inside a `result` payload with their host-side
+/// equivalents using the container→host map. Only top-level `path` is rewritten
+/// (file/image result types). If the value isn't in the map but starts with a
+/// known mount root and matches by suffix, we still try a longest-prefix match.
+fn translate_result_paths(payload: &mut Value, map: &HashMap<String, String>) {
+    if let Some(obj) = payload.as_object_mut() {
+        if let Some(p) = obj.get("path").and_then(|v| v.as_str()).map(String::from) {
+            if let Some(host) = map.get(&p) {
+                obj.insert("path".into(), Value::String(host.clone()));
+            } else if let Some(host) = longest_prefix_match(&p, map) {
+                obj.insert("path".into(), Value::String(host));
+            }
+        }
+    }
+}
+
+fn longest_prefix_match(container_path: &str, map: &HashMap<String, String>) -> Option<String> {
+    let mut best: Option<(&String, &String)> = None;
+    for (k, v) in map {
+        if container_path.starts_with(k.as_str()) {
+            if best.map(|(b, _)| k.len() > b.len()).unwrap_or(true) {
+                best = Some((k, v));
+            }
+        }
+    }
+    best.map(|(k, host)| {
+        let suffix = &container_path[k.len()..];
+        format!("{host}{suffix}")
+    })
 }
 
 fn resolve_cwd(script_dir: &Path, configured: Option<&str>) -> PathBuf {

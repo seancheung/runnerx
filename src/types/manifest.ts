@@ -76,6 +76,10 @@ export interface OutputSpec {
   accept?: string[];
 }
 
+export interface Sandbox {
+  image: string;
+}
+
 export interface Manifest {
   name: string;
   id?: string;
@@ -85,6 +89,7 @@ export interface Manifest {
   category?: string;
   tags?: string[];
   readme?: string;
+  sandbox?: Sandbox;
   entry: EntrySpec;
   platform?: {
     windows?: { entry?: EntrySpec; lifecycle?: Lifecycle };
@@ -95,11 +100,20 @@ export interface Manifest {
   outputs?: OutputSpec[];
 }
 
+export interface InstallState {
+  version: number;
+  kind: "host" | "sandbox";
+  image?: string;
+  baseImage?: string;
+  installedAt?: string;
+}
+
 export interface ScriptInfo {
   id: string;
   dir: string;
   manifest: Manifest;
   installed: boolean;
+  installState?: InstallState;
   iconDataUrl?: string;
   readmePath?: string;
 }

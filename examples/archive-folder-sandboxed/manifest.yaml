@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=../../schema/manifest.schema.json
+name: 打包目录为 zip（沙盒）
+description: 沙盒版的 archive-folder。同样把目录打包为 zip，但整个跑在 Alpine 容器里，输入目录强制 ro 挂载，输出 zip 通过临时挂载点回传到 host。
+version: 0.1.0
+category: 文件批处理
+tags: [archive, sandbox]
+
+# Alpine 5MB 起步，install 时 apk add zip 即可。
+sandbox:
+  image: alpine:3.20
+
+entry:
+  command: ./run.sh
+  argsMode: env
+
+lifecycle:
+  install:
+    command: ./install.sh
+
+inputs:
+  - id: source_dir
+    label: 源目录
+    type: directory
+    required: true
+
+  - id: include_hidden
+    label: 包含隐藏文件 / 点开头的文件
+    type: boolean
+    default: false
+
+  - id: compression
+    label: 压缩级别
+    type: enum
+    options:
+      - { value: optimal,       label: 默认（推荐） }
+      - { value: fastest,       label: 快速 }
+      - { value: nocompression, label: 不压缩 }
+    default: optimal
+
+outputs:
+  - id: archive
+    label: 输出 zip 文件
+    type: file
+    save: true
+    accept: [".zip"]

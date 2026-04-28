@@ -1,10 +1,32 @@
 use crate::error::{Result, RxError};
 use crate::manifest::Manifest;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const INSTALLED_MARKER: &str = ".runnerx-installed";
+/// JSON state file written after a successful install.
+const INSTALL_STATE_FILE: &str = ".runnerx-installed.json";
+/// Pre-sandbox empty marker; still recognized as "host installed" for backward compat.
+const LEGACY_MARKER: &str = ".runnerx-installed";
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum InstallKind {
+    Host,
+    Sandbox,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallState {
+    pub version: u32,
+    pub kind: InstallKind,
+    /// For sandbox: the docker image ref produced by `docker commit`.
+    pub image: Option<String>,
+    /// For sandbox: the base image name from manifest.sandbox.image.
+    pub base_image: Option<String>,
+    pub installed_at: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,6 +35,7 @@ pub struct ScriptInfo {
     pub dir: String,
     pub manifest: Manifest,
     pub installed: bool,
+    pub install_state: Option<InstallState>,
     /// Optional inline image data url for the icon. Loaded eagerly so the
     /// frontend can show it without an extra round-trip per script.
     pub icon_data_url: Option<String>,
@@ -82,7 +105,8 @@ pub fn load_script(dir: &Path) -> Result<ScriptInfo> {
             message: "cannot derive id".into(),
         })?;
 
-    let installed = dir.join(INSTALLED_MARKER).exists();
+    let install_state = read_install_state(dir);
+    let installed = install_state.is_some();
     let icon_data_url = manifest
         .icon
         .as_deref()
@@ -94,6 +118,7 @@ pub fn load_script(dir: &Path) -> Result<ScriptInfo> {
         dir: dir.display().to_string(),
         manifest,
         installed,
+        install_state,
         icon_data_url,
         readme_path,
     })
@@ -171,6 +196,94 @@ mod base64_lite {
     }
 }
 
-pub fn installed_marker_path(dir: &Path) -> PathBuf {
-    dir.join(INSTALLED_MARKER)
+pub fn install_state_path(dir: &Path) -> PathBuf {
+    dir.join(INSTALL_STATE_FILE)
+}
+
+pub fn legacy_marker_path(dir: &Path) -> PathBuf {
+    dir.join(LEGACY_MARKER)
+}
+
+pub fn read_install_state(dir: &Path) -> Option<InstallState> {
+    let json_path = install_state_path(dir);
+    if json_path.is_file() {
+        if let Ok(content) = fs::read_to_string(&json_path) {
+            if let Ok(state) = serde_json::from_str::<InstallState>(&content) {
+                return Some(state);
+            }
+        }
+    }
+    if legacy_marker_path(dir).is_file() {
+        return Some(InstallState {
+            version: 1,
+            kind: InstallKind::Host,
+            image: None,
+            base_image: None,
+            installed_at: None,
+        });
+    }
+    None
+}
+
+pub fn write_install_state(dir: &Path, state: &InstallState) -> Result<()> {
+    let json = serde_json::to_string_pretty(state)?;
+    fs::write(install_state_path(dir), json)?;
+    // Clean up the legacy empty marker if it lingers from a previous version.
+    let legacy = legacy_marker_path(dir);
+    if legacy.exists() {
+        let _ = fs::remove_file(&legacy);
+    }
+    Ok(())
+}
+
+pub fn clear_install_state(dir: &Path) -> Result<()> {
+    let json_path = install_state_path(dir);
+    if json_path.exists() {
+        fs::remove_file(&json_path)?;
+    }
+    let legacy = legacy_marker_path(dir);
+    if legacy.exists() {
+        fs::remove_file(&legacy)?;
+    }
+    Ok(())
+}
+
+pub fn current_iso_timestamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    // crude RFC3339 formatter (UTC) without pulling in chrono
+    // 1970-01-01 00:00:00 UTC + secs
+    let days = secs / 86_400;
+    let rem = secs % 86_400;
+    let h = rem / 3_600;
+    let m = (rem % 3_600) / 60;
+    let s = rem % 60;
+    let (year, month, day) = days_to_ymd(days as i64);
+    format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z")
+}
+
+fn days_to_ymd(mut days: i64) -> (i64, u32, u32) {
+    // 1970-01-01 is day 0
+    let mut year: i64 = 1970;
+    loop {
+        let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+        let days_in_year = if leap { 366 } else { 365 };
+        if days < days_in_year { break; }
+        days -= days_in_year;
+        year += 1;
+    }
+    let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+    let months: [u32; 12] = if leap {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    let mut month: u32 = 1;
+    let mut d = days as u32;
+    for &len in &months {
+        if d < len { break; }
+        d -= len;
+        month += 1;
+    }
+    (year, month, d + 1)
 }
