@@ -135,6 +135,12 @@ options:
 @@runnerx result {"type": "text", "data": "...", "label": "..."}
 \`\`\`
 
+**协议行的 payload 必须是严格合法的 JSON**，否则解析失败、整行会作为普通 stdout 显示给用户：
+- 数字必须带整数部分：写 \`0.5\` ✓ 而不是 \`.5\` ✗（\`bc\` 默认输出 \`scale=4; 21/100\` 会得到 \`.2100\`，**这种值不能直接塞进 JSON**）。
+- 在 bash 里安全做法：用 \`printf '%.4f' "$x"\` 或 \`awk\` 格式化数字；用 \`bc\` 时先用 \`awk\` / \`printf\` 套一层补零，或用 \`echo "scale=4; ... " | bc | awk '{printf "%.4f", $1}'\`。
+- 字符串里出现的双引号、反斜杠、换行要转义。bash 里推荐用 \`printf '@@runnerx progress {"value":%.4f,"message":"%s"}\\n' "$v" "$msg"\` 这种格式化输出，避免手拼 JSON 出错。
+- \`value\` 必须是 0~1 的浮点数，超出范围请先 clamp。
+
 # 平台与最佳实践
 
 - **顶层 \`entry\` 必填**，作为脚本的默认入口；用户消息会注明当前平台，请把顶层 \`entry\` 写成在该平台原生可运行的命令。
@@ -143,7 +149,7 @@ options:
 - 跨平台脚本（仅在用户明确要求时）：仍然要写顶层 \`entry\`，再用 \`platform.windows\` / \`platform.macos\` / \`platform.linux\` 覆盖其它平台；\`platform.<os>.entry\` 只是覆盖，不能替代顶层 \`entry\`，缺失顶层 \`entry\` 会导致脚本加载失败。
 - bash 脚本第一行写 shebang \`#!/usr/bin/env bash\`；用 \`set -euo pipefail\`。Windows 平台用 \`run.ps1\`，配合 \`entry.shell: true\`。
 - 引用环境变量时大写，e.g. \`"\${RUNNERX_TITLE:-default}"\`（PowerShell 用 \`$env:RUNNERX_TITLE\`）。
-- 推进进度条：每步打印一行 \`@@runnerx progress {"value":<0~1>,"message":"..."}\`。
+- 推进进度条：每步打印一行 \`@@runnerx progress {"value":<0~1>,"message":"..."}\`；务必输出严格合法 JSON（特别注意 \`bc\` 的 \`.5\` 这种无前导 0 的小数会破坏 JSON，用 \`printf '%.4f'\` 套一层）。
 - 写有意义的 description；分类放在 \`category\`，常见分类：媒体、数据、文件、系统、开发、示例。
 - macOS 自带 bash 是 **3.2**，不要用 4.x 才有的特性。
 
@@ -179,6 +185,57 @@ set -euo pipefail
 - 不要使用 markdown code fence 包裹 \`<script>\` 块；直接写裸 XML。
 - 文件内容直接写在 \`<file>\` 之间，不要做任何 escape；对 \`<\` \`>\` 等 XML 字符不要用实体。解析器靠 \`</file>\` 行匹配。`;
 
+export interface ExistingFile {
+  path: string;
+  content: string;
+}
+
+export async function editScript(
+  cfg: LlmConfig,
+  args: {
+    originalId: string;
+    files: ExistingFile[];
+    instruction: string;
+  },
+  options: {
+    signal?: AbortSignal;
+    onDelta?: (chunk: string, kind: ChatDeltaKind) => void;
+    platform?: Platform;
+  } = {},
+): Promise<GeneratedScript> {
+  const platform = options.platform ?? detectPlatform();
+  const platformLabel = PLATFORM_LABEL[platform];
+  const existingBlock = args.files
+    .map((f) =>
+      `<existing-file path="${f.path}">\n${f.content.replace(/\r\n/g, "\n")}\n</existing-file>`,
+    )
+    .join("\n\n");
+  const messages: ChatMessage[] = [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content:
+        `我有一个现存的 runnerx 脚本（id=\`${args.originalId}\`），下面是它当前的所有文本文件（二进制如图标已省略）：\n\n` +
+        `${existingBlock}\n\n` +
+        `修改请求：\n${args.instruction.trim()}\n\n` +
+        `请输出修改后**完整的 \`<script>\` 块**：所有未改动的文件也要原样写出，不要省略，也不要写"unchanged"等占位。\n` +
+        `当前用户平台：${platformLabel}；如顶层 entry 命令需调整，请适配该平台。\n` +
+        `\`<script>\` 的 \`id\` **必须保留为 \`${args.originalId}\`**（除非修改请求里明确要求改名为新的 kebab-case id）。\n` +
+        `**只在原脚本已经使用 \`platform\` 字段，或修改请求明确要求"跨平台"/"多平台"** 时才保留/添加 \`platform\` 覆盖；` +
+        `否则不要添加新的 \`platform\` 字段。\n` +
+        `**只在原脚本已经使用 \`sandbox\` 字段，或修改请求明确要求"沙盒"/"docker"/"容器隔离"** 时才保留/添加 \`sandbox\`；` +
+        `否则不要添加新的 \`sandbox\` 字段。\n\n` +
+        `按照系统消息里的格式输出。`,
+    },
+  ];
+  const text = await chat(cfg, messages, {
+    signal: options.signal,
+    onDelta: options.onDelta,
+    maxTokens: 8192,
+  });
+  return parseGeneratedScript(text);
+}
+
 export async function generateScript(
   cfg: LlmConfig,
   description: string,
@@ -210,6 +267,44 @@ export async function generateScript(
     maxTokens: 8192,
   });
   return parseGeneratedScript(text);
+}
+
+/**
+ * Rewrite the top-level `id:` field of a manifest.yaml to `newId`.
+ * - Only matches lines that start at column 0, so nested `id:` fields
+ *   inside `inputs:` / `outputs:` are left alone.
+ * - If no top-level `id:` is present, inserts one right after `name:`
+ *   (or at the top if `name:` isn't found).
+ */
+export function rewriteManifestId(yaml: string, newId: string): string {
+  const re = /^id:[ \t].*$/m;
+  if (re.test(yaml)) {
+    return yaml.replace(re, `id: ${newId}`);
+  }
+  const lines = yaml.split("\n");
+  const insertAt = lines.findIndex((l) => /^name:[ \t]/.test(l));
+  if (insertAt >= 0) {
+    lines.splice(insertAt + 1, 0, `id: ${newId}`);
+  } else {
+    lines.unshift(`id: ${newId}`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Apply `targetId` to the manifest.yaml inside `files`, returning a new array.
+ * Files other than the manifest are left as-is.
+ */
+export function applyTargetId(
+  files: GeneratedFile[],
+  targetId: string,
+): GeneratedFile[] {
+  return files.map((f) => {
+    if (f.path === "manifest.yaml" || f.path === "manifest.yml") {
+      return { ...f, content: rewriteManifestId(f.content, targetId) };
+    }
+    return f;
+  });
 }
 
 export function parseGeneratedScript(text: string): GeneratedScript {

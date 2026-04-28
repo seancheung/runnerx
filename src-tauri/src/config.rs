@@ -21,6 +21,12 @@ pub struct LlmConfig {
     pub base_url: String,
     #[serde(default)]
     pub model: String,
+    /// Enable provider-specific extended thinking. Currently only honored for
+    /// DeepSeek (forwarded as `thinking: {type: "enabled"}` in the request
+    /// body). When unset/false the field is not sent and the server uses its
+    /// default behavior.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

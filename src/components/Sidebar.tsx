@@ -55,7 +55,7 @@ export function Sidebar({
               onClick={onOpenAiGenerate}
               style={{ padding: "2px 8px", fontSize: 11 }}
             >
-              AI
+              AI创建
             </button>
             <button title="刷新" onClick={onRefresh} style={{ padding: "2px 8px", fontSize: 11 }}>↻</button>
             <button title="设置" onClick={onOpenSettings} style={{ padding: "2px 8px", fontSize: 11 }}>⚙</button>

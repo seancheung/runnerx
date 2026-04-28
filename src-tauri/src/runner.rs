@@ -30,6 +30,38 @@ pub(crate) fn hide_console_window(cmd: &mut Command) {
     }
 }
 
+/// Put the child into its own process group on Unix. This is what makes
+/// "cancel" actually stop subprocesses spawned with `&` from inside a script
+/// — without it, killing the wrapper shell leaves orphans (ffmpeg, python
+/// background tasks, ...) running under init.
+fn set_process_group(cmd: &mut Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.as_std_mut().process_group(0);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = cmd;
+    }
+}
+
+#[cfg(unix)]
+fn kill_process_group(pid: u32) {
+    // Negative pid means "process group with this leader". SIGKILL on the
+    // group reaches every descendant in the same pgid, which our
+    // process_group(0) call put them in.
+    unsafe {
+        libc::kill(-(pid as i32), libc::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_process_group(_pid: u32) {
+    // On Windows we rely on tokio's `child.kill()` (TerminateProcess) plus
+    // sandbox cleanup; a true process-tree kill would need Job Objects.
+}
+
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RunMode {
@@ -222,6 +254,7 @@ pub(crate) async fn spawn_event_stream(
         command.stdin(Stdio::null());
     }
     hide_console_window(command);
+    set_process_group(command);
 
     let run_id = predetermined_run_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let (kill_tx, mut kill_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -233,6 +266,7 @@ pub(crate) async fn spawn_event_stream(
     let mut child = command.spawn().map_err(|e| {
         RxError::Other(format!("spawn failed: {e}"))
     })?;
+    let child_pid = child.id();
     let stdout = child.stdout.take().ok_or_else(|| RxError::Other("no stdout".into()))?;
     let stderr = child.stderr.take().ok_or_else(|| RxError::Other("no stderr".into()))?;
 
@@ -277,6 +311,9 @@ pub(crate) async fn spawn_event_stream(
             biased;
             _ = kill_rx.recv() => {
                 cancelled = true;
+                if let Some(pid) = child_pid {
+                    kill_process_group(pid);
+                }
                 let _ = child.kill().await;
                 child.wait().await
             }

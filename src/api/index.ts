@@ -25,6 +25,16 @@ export async function readScript(dir: string): Promise<ScriptInfo> {
   return await invoke<ScriptInfo>("read_script", { dir });
 }
 
+export interface ScriptFileEntry {
+  path: string;
+  content: string;
+  executable: boolean;
+}
+
+export async function readScriptFiles(dir: string): Promise<ScriptFileEntry[]> {
+  return await invoke<ScriptFileEntry[]>("read_script_files", { dir });
+}
+
 export async function readReadme(path: string): Promise<string> {
   return await invoke<string>("read_readme", { path });
 }

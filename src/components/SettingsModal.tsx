@@ -48,6 +48,7 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
           apiKey: c.llm.apiKey ?? "",
           baseUrl: c.llm.baseUrl ?? LLM_PROVIDER_DEFAULTS[c.llm.provider].baseUrl,
           model: c.llm.model ?? LLM_PROVIDER_DEFAULTS[c.llm.provider].model,
+          thinking: c.llm.thinking,
         });
       }
     }).catch(() => {});
@@ -69,6 +70,8 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
       apiKey: prev.apiKey,
       baseUrl: def.baseUrl,
       model: def.model || prev.model,
+      // thinking is DeepSeek-only; reset when switching to a different provider.
+      thinking: provider === "deepseek" ? prev.thinking : undefined,
     }));
   };
 
@@ -79,6 +82,9 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
       apiKey: llm.apiKey.trim(),
       baseUrl: llm.baseUrl.trim(),
       model: llm.model.trim(),
+      ...(llm.provider === "deepseek" && llm.thinking !== undefined
+        ? { thinking: llm.thinking }
+        : {}),
     };
   }, [llmEnabled, llm]);
 
@@ -257,6 +263,30 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
                 {llm.provider === "deepseek" && "如 deepseek-chat, deepseek-reasoner"}
               </div>
             </div>
+
+            {llm.provider === "deepseek" && (
+              <div className="field">
+                <label className="field-label">思考链 (thinking)</label>
+                <select
+                  value={llm.thinking === undefined ? "default" : llm.thinking ? "enabled" : "disabled"}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setLlm((p) => ({
+                      ...p,
+                      thinking: v === "default" ? undefined : v === "enabled",
+                    }));
+                  }}
+                >
+                  <option value="default">服务端默认（不发送 thinking 字段）</option>
+                  <option value="enabled">启用（thinking.type = "enabled"）</option>
+                  <option value="disabled">禁用（thinking.type = "disabled"）</option>
+                </select>
+                <div className="field-desc">
+                  请求体里追加 <code>{'{"thinking":{"type":"enabled|disabled"}}'}</code>。
+                  非 reasoner 模型可能不支持，留"默认"即可。
+                </div>
+              </div>
+            )}
           </>
         )}
 

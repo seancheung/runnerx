@@ -15,6 +15,8 @@ export interface LlmConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  /** DeepSeek only: send `thinking: { type: "enabled" }` in the request body. */
+  thinking?: boolean;
 }
 
 export interface AppConfig {

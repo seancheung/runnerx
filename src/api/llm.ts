@@ -137,6 +137,9 @@ async function chatOpenAI(
       messages,
       stream,
       ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
+      ...(cfg.provider === "deepseek" && cfg.thinking !== undefined
+        ? { thinking: { type: cfg.thinking ? "enabled" : "disabled" } }
+        : {}),
     }),
     signal: opts.signal,
   });

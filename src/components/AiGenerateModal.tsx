@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
-import { generateScript, type GeneratedScript } from "../api/scriptGen";
+import { applyTargetId, generateScript, type GeneratedScript } from "../api/scriptGen";
 import { LlmError } from "../api/llm";
 import type { AppConfig, LlmConfig } from "../types/config";
 import { LLM_PROVIDER_LABELS } from "../types/config";
@@ -27,6 +27,7 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [streamText, setStreamText] = useState("");
   const [thinkingText, setThinkingText] = useState("");
+  const [editedId, setEditedId] = useState("");
   const phaseRef = useRef<Phase>(phase);
   phaseRef.current = phase;
 
@@ -72,6 +73,7 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
           }
         },
       });
+      setEditedId(script.id);
       setPhase({ kind: "preview", script });
     } catch (e) {
       if (ctrl.signal.aborted) {
@@ -87,17 +89,20 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
 
   const onWrite = async () => {
     if (phase.kind !== "preview" || !root) return;
+    const id = editedId.trim();
+    if (!isValidScriptId(id)) return;
     const script = phase.script;
     setPhase({ kind: "writing" });
     try {
+      const aligned = applyTargetId(script.files, id);
       const dir = await api.writeScriptFiles(
         root,
-        script.id,
-        script.files.map((f) => ({ path: f.path, content: f.content, executable: f.executable })),
+        id,
+        aligned.map((f) => ({ path: f.path, content: f.content, executable: f.executable })),
         overwrite,
       );
-      setPhase({ kind: "done", dir, id: script.id });
-      onCreated(dir, script.id);
+      setPhase({ kind: "done", dir, id });
+      onCreated(dir, id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setPhase({ kind: "error", message: msg });
@@ -114,7 +119,7 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
       <div
         className="modal"
         onClick={(e) => e.stopPropagation()}
-        style={{ minWidth: 560, maxWidth: 860, maxHeight: "85vh", overflowY: "auto" }}
+        style={{ width: "min(820px, 92vw)", maxWidth: "none", maxHeight: "85vh", overflowY: "auto" }}
       >
         <h3>AI 创建脚本</h3>
 
@@ -146,11 +151,19 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
             </div>
 
             {phase.kind === "preview" && (
-              <PreviewBlock
-                script={phase.script}
-                overwrite={overwrite}
-                onOverwriteChange={setOverwrite}
-              />
+              <>
+                <ScriptIdInput
+                  value={editedId}
+                  onChange={setEditedId}
+                  originalSuggestion={phase.script.id}
+                />
+                <PreviewBlock
+                  script={phase.script}
+                  displayId={editedId.trim() || phase.script.id}
+                  overwrite={overwrite}
+                  onOverwriteChange={setOverwrite}
+                />
+              </>
             )}
 
             {phase.kind === "generating" && (
@@ -214,6 +227,8 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
                 type="button"
                 className="primary"
                 onClick={onWrite}
+                disabled={!isValidScriptId(editedId.trim())}
+                title={!isValidScriptId(editedId.trim()) ? "脚本 id 非法（kebab-case，纯小写字母/数字/连字符）" : undefined}
               >
                 写入脚本目录
               </button>
@@ -225,7 +240,7 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
   );
 }
 
-function StreamView({
+export function StreamView({
   text,
   title,
   placeholder,
@@ -276,10 +291,12 @@ function StreamView({
 
 function PreviewBlock({
   script,
+  displayId,
   overwrite,
   onOverwriteChange,
 }: {
   script: GeneratedScript;
+  displayId?: string;
   overwrite: boolean;
   onOverwriteChange: (v: boolean) => void;
 }) {
@@ -287,7 +304,7 @@ function PreviewBlock({
   return (
     <div style={{ marginTop: 8 }}>
       <div className="field-section-title" style={{ marginTop: 10 }}>
-        预览 — <code>{script.id}/</code>（{script.files.length} 个文件）
+        预览 — <code>{displayId ?? script.id}/</code>（{script.files.length} 个文件）
       </div>
       {script.rationale && (
         <div className="field-desc" style={{ marginBottom: 8, whiteSpace: "pre-wrap" }}>
@@ -362,4 +379,72 @@ function PreviewBlock({
 
 function truncate(s: string, n: number) {
   return s.length <= n ? s : s.slice(0, n) + "…";
+}
+
+const SCRIPT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+export function isValidScriptId(id: string): boolean {
+  return SCRIPT_ID_RE.test(id);
+}
+
+export function ScriptIdInput({
+  value,
+  onChange,
+  label = "脚本 id",
+  hint,
+  originalSuggestion,
+  conflictWith,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  label?: string;
+  hint?: string;
+  /** Show a "AI 建议: <x>" reset shortcut when value diverges from it. */
+  originalSuggestion?: string;
+  /** If set, warn when value equals this (e.g. another script's id). */
+  conflictWith?: string;
+}) {
+  const trimmed = value.trim();
+  const valid = isValidScriptId(trimmed);
+  const conflict = conflictWith != null && trimmed === conflictWith;
+  return (
+    <div className="field" style={{ marginTop: 10 }}>
+      <label className="field-label">{label}</label>
+      <div className="field-row">
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="kebab-case-id"
+          spellCheck={false}
+          autoComplete="off"
+          style={{
+            fontFamily: "ui-monospace, monospace",
+            borderColor: !trimmed
+              ? undefined
+              : !valid
+                ? "var(--danger)"
+                : conflict
+                  ? "var(--warn)"
+                  : undefined,
+          }}
+        />
+        {originalSuggestion && trimmed !== originalSuggestion && (
+          <button type="button" onClick={() => onChange(originalSuggestion)} title="恢复 AI 建议的 id">
+            ↺ {originalSuggestion}
+          </button>
+        )}
+      </div>
+      <div className="field-desc">
+        {!trimmed ? (
+          "请输入 id"
+        ) : !valid ? (
+          <span style={{ color: "var(--danger)" }}>非法：必须是 kebab-case（小写字母 / 数字 / 连字符，且首字符不能是 -）。</span>
+        ) : conflict ? (
+          <span style={{ color: "var(--warn)" }}>与现有脚本 id 相同，会写到同一目录（如选"另存为"，需勾选覆盖）。</span>
+        ) : (
+          hint ?? "脚本会写入 <root>/<id>/。kebab-case：小写字母 / 数字 / 连字符。"
+        )}
+      </div>
+    </div>
+  );
 }

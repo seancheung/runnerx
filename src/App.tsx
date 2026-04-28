@@ -4,6 +4,7 @@ import * as api from "./api";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsModal } from "./components/SettingsModal";
 import { AiGenerateModal } from "./components/AiGenerateModal";
+import { AiEditModal } from "./components/AiEditModal";
 import { ScriptDetail } from "./components/ScriptDetail";
 import { EMPTY_RUN, type RunSnapshot } from "./components/RunPanel";
 import {
@@ -25,6 +26,7 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showAiGenerate, setShowAiGenerate] = useState(false);
+  const [showAiEdit, setShowAiEdit] = useState(false);
   const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
   const [theme, setThemeState] = useState<ThemePreference>("system");
   const [run, setRun] = useState<RunSnapshot>(EMPTY_RUN);
@@ -230,6 +232,7 @@ function App() {
             onStartUninstall={startUninstall}
             onCancel={cancel}
             onMarkUninstalled={handleMarkUninstalled}
+            onAiEdit={() => setShowAiEdit(true)}
           />
         ) : (
           <div className="detail-empty">
@@ -252,6 +255,17 @@ function App() {
           root={root}
           onClose={() => setShowAiGenerate(false)}
           onCreated={(_dir, id) => {
+            setPendingSelectId(id);
+            refresh();
+          }}
+        />
+      )}
+      {showAiEdit && selected && (
+        <AiEditModal
+          script={selected}
+          root={root}
+          onClose={() => setShowAiEdit(false)}
+          onSaved={(_dir, id) => {
             setPendingSelectId(id);
             refresh();
           }}

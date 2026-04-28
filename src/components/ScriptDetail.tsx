@@ -14,10 +14,11 @@ interface Props {
   onStartUninstall: (alsoRemoveBase: boolean) => void;
   onCancel: () => void;
   onMarkUninstalled: () => void;
+  onAiEdit: () => void;
 }
 
 export function ScriptDetail({
-  script, run, onStartRun, onStartInstall, onStartUninstall, onCancel, onMarkUninstalled,
+  script, run, onStartRun, onStartInstall, onStartUninstall, onCancel, onMarkUninstalled, onAiEdit,
 }: Props) {
   const [tab, setTab] = useState<"run" | "readme">("run");
   const [readme, setReadme] = useState<string | null>(null);
@@ -74,6 +75,13 @@ export function ScriptDetail({
           </div>
         </div>
         <div className="actions">
+          <button
+            onClick={onAiEdit}
+            disabled={isRunning}
+            title="让 AI 根据自然语言修改这个脚本"
+          >
+            AI 修改
+          </button>
           {hasInstall && (
             <button onClick={onStartInstall} disabled={isRunning}>
               {script.installed ? "重新安装" : "安装"}

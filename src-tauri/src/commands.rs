@@ -39,6 +39,111 @@ pub fn read_script(dir: String) -> Result<ScriptInfo> {
     scanner::load_script(&PathBuf::from(dir))
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptFileEntry {
+    pub path: String,
+    pub content: String,
+    pub executable: bool,
+}
+
+/// Read text-like files inside a script directory for AI editing context.
+/// Skips binary files (icons, archives), oversized files, and the install
+/// state marker. Paths are relative to `dir`, using forward slashes.
+#[tauri::command]
+pub fn read_script_files(dir: String) -> Result<Vec<ScriptFileEntry>> {
+    const MAX_TOTAL_BYTES: u64 = 256 * 1024;
+    const MAX_FILE_BYTES: u64 = 64 * 1024;
+    const SKIP_EXT: &[&str] = &[
+        "png", "jpg", "jpeg", "gif", "webp", "ico", "icns", "bmp",
+        "zip", "tar", "gz", "tgz", "xz", "bz2", "7z",
+        "exe", "dll", "so", "dylib", "bin",
+        "pdf", "mp3", "mp4", "mov", "wav",
+    ];
+    let root = PathBuf::from(&dir);
+    if !root.is_dir() {
+        return Err(RxError::Other(format!("脚本目录不存在：{}", root.display())));
+    }
+    let mut entries: Vec<ScriptFileEntry> = Vec::new();
+    let mut total: u64 = 0;
+    let mut stack: Vec<PathBuf> = vec![root.clone()];
+    while let Some(current) = stack.pop() {
+        let read = match std::fs::read_dir(&current) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        for child in read.flatten() {
+            let abs = child.path();
+            let name = child.file_name();
+            let name_str = name.to_string_lossy();
+            // Skip hidden entries (e.g. .git, .DS_Store, .runnerx-installed).
+            if name_str.starts_with('.') {
+                continue;
+            }
+            let ft = match child.file_type() {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            if ft.is_dir() {
+                stack.push(abs);
+                continue;
+            }
+            if !ft.is_file() {
+                continue;
+            }
+            let ext = abs.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+            if !ext.is_empty() && SKIP_EXT.iter().any(|x| *x == ext.as_str()) {
+                continue;
+            }
+            let metadata = match abs.metadata() {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            let size = metadata.len();
+            if size > MAX_FILE_BYTES {
+                continue;
+            }
+            if total + size > MAX_TOTAL_BYTES {
+                stack.clear();
+                break;
+            }
+            let content = match std::fs::read_to_string(&abs) {
+                Ok(s) => s,
+                Err(_) => continue, // not utf-8 / binary
+            };
+            let rel = match abs.strip_prefix(&root) {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            let rel_str = rel.components().filter_map(|c| match c {
+                Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
+                _ => None,
+            }).collect::<Vec<_>>().join("/");
+            if rel_str.is_empty() {
+                continue;
+            }
+            let executable = is_executable(&metadata, &rel_str);
+            total += size;
+            entries.push(ScriptFileEntry { path: rel_str, content, executable });
+        }
+    }
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(entries)
+}
+
+#[cfg(unix)]
+fn is_executable(meta: &std::fs::Metadata, _rel: &str) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    meta.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable(_meta: &std::fs::Metadata, rel: &str) -> bool {
+    let lower = rel.to_ascii_lowercase();
+    lower.ends_with(".sh") || lower.ends_with(".bash")
+        || lower.ends_with(".py") || lower.ends_with(".rb") || lower.ends_with(".pl")
+}
+
 #[tauri::command]
 pub fn read_readme(path: String) -> Result<String> {
     Ok(std::fs::read_to_string(&path)?)
