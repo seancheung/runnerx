@@ -1,0 +1,35 @@
+mod commands;
+mod error;
+mod manifest;
+mod runner;
+mod scanner;
+
+use std::sync::Arc;
+
+use runner::RunnerState;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .manage(Arc::new(RunnerState::new()))
+        .invoke_handler(tauri::generate_handler![
+            commands::list_scripts,
+            commands::default_scripts_root,
+            commands::read_script,
+            commands::read_readme,
+            commands::mark_uninstalled,
+            commands::run_script,
+            commands::run_install,
+            commands::run_uninstall,
+            commands::cancel_run,
+            commands::current_run,
+            commands::manifest_schema,
+            commands::validate_manifest,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

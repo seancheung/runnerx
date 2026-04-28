@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=../../schema/manifest.schema.json
+name: 批量重命名
+description: 演示带有 install lifecycle 的 Python 脚本。基于正则把目录里的文件改名。
+version: 0.1.0
+category: 文件批处理
+tags: [python, file]
+
+entry:
+  command: .venv/bin/python
+  args: [run.py]
+  argsMode: stdin-json
+
+lifecycle:
+  install:
+    command: ./install.sh
+  uninstall:
+    command: ./uninstall.sh
+
+inputs:
+  - id: dir
+    label: 目标目录
+    type: directory
+    required: true
+  - id: pattern
+    label: 匹配正则
+    type: string
+    required: true
+    placeholder: "IMG_(\\d+)\\.jpg"
+    default: "(.*)\\.jpg$"
+  - id: replacement
+    label: 替换为
+    type: string
+    required: true
+    default: "photo_\\1.jpg"
+  - id: dry_run
+    label: 仅预览（不改文件）
+    type: boolean
+    default: true

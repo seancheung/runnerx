@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=../../schema/manifest.schema.json
+name: 协议示例
+description: 展示所有输入类型、when 联动、以及 @@runnerx 协议的进度/日志/结构化结果。
+version: 0.1.0
+category: 示例
+tags: [demo, protocol]
+
+entry:
+  command: ./run.sh
+  argsMode: env
+
+inputs:
+  - id: title
+    type: string
+    label: 任务标题
+    required: true
+    default: 我的演示
+
+  - id: notes
+    type: string
+    multiline: true
+    label: 备注
+    placeholder: "可以拖拽右下角调整高度"
+    description: "演示 multiline 多行文本框（type: string + multiline: true）"
+
+  - id: count
+    type: number
+    label: 步数
+    integer: true
+    min: 1
+    max: 20
+    default: 5
+
+  - id: verbose
+    type: boolean
+    label: 详细日志
+    default: false
+
+  - id: format
+    type: enum
+    label: 输出形式
+    options:
+      - { value: table, label: 表格 }
+      - { value: json, label: JSON }
+      - { value: text, label: 文本 }
+    default: table
+
+  - id: rows
+    type: number
+    label: 表格行数
+    integer: true
+    min: 1
+    max: 50
+    default: 5
+    when: { format: table }
+
+  - id: tags
+    type: enum
+    label: 标签（多选）
+    multiple: true
+    options: [red, green, blue, yellow]
+
+  - id: input_file
+    type: file
+    label: 任意文件（可选）
+    accept: [".txt", ".md", ".json"]
+
+  - id: secret
+    type: password
+    label: 密码（演示）

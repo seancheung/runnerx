@@ -1,0 +1,35 @@
+{
+  "name": "runnerx",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "icons": "rsvg-convert -w 1024 -h 1024 -f png src-tauri/icons/source.svg -o src-tauri/icons/source.png && tauri icon src-tauri/icons/source.png && rm -rf src-tauri/icons/android src-tauri/icons/ios && rm -f src-tauri/icons/StoreLogo.png && find src-tauri/icons -maxdepth 1 -name 'Square*Logo.png' -delete"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
+    "@tauri-apps/plugin-fs": "^2.5.0",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-store": "^2.4.2",
+    "ansi_up": "^6.0.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.74.0",
+    "react-markdown": "^10.1.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
+  }
+}

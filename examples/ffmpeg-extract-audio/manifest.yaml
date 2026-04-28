@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=../../schema/manifest.schema.json
+name: 提取音频
+description: 用 ffmpeg 从视频中提取音轨。
+version: 0.1.0
+category: 媒体处理
+tags: [ffmpeg, audio]
+
+entry:
+  command: ./run.sh
+  argsMode: env
+
+inputs:
+  - id: input_file
+    label: 输入视频
+    type: file
+    required: true
+    accept: [".mp4", ".mov", ".mkv", ".webm", ".avi"]
+
+  - id: format
+    label: 输出格式
+    type: enum
+    options:
+      - { value: mp3, label: MP3 }
+      - { value: aac, label: AAC }
+      - { value: wav, label: WAV (无损) }
+    default: mp3
+
+  - id: bitrate
+    label: 比特率 (kbps)
+    type: number
+    integer: true
+    min: 64
+    max: 320
+    step: 32
+    default: 192
+    when: { format: [mp3, aac] }
+
+outputs:
+  - id: output_file
+    label: 输出文件
+    type: file
+    save: true
+    accept: [".mp3", ".aac", ".wav"]
