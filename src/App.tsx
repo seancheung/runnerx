@@ -135,7 +135,14 @@ function App() {
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
-    api.onRunEvent((evt) => handlerRef.current(evt)).then((u) => {
+    // 注：StrictMode dev 下 effect 会跑两次，listen() 是异步注册到 backend 的；在
+    // 拿到 unlisten 之前事件就可能到达，所以 listener 自身也要检查 cancelled，
+    // 否则首次 effect 的 listener 会和第二次 effect 的 listener 同时触发 handler，
+    // 导致每行 stdout / 每个 result 被消费两次（UI 上看就是全部内容重复）。
+    api.onRunEvent((evt) => {
+      if (cancelled) return;
+      handlerRef.current(evt);
+    }).then((u) => {
       if (cancelled) u();
       else unlisten = u;
     });
