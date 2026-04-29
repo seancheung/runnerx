@@ -5,9 +5,10 @@ version: 0.1.0
 category: 示例
 tags: [demo, protocol]
 
-entry:
-  command: ./run.sh
-  argsMode: env
+macos:
+  entry:
+    command: ./run.sh
+    argsMode: env
 
 inputs:
   - id: title

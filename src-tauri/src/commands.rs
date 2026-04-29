@@ -182,8 +182,13 @@ pub async fn run_install(
 ) -> Result<String> {
     let path = PathBuf::from(&dir);
     let info = scanner::load_script(&path)?;
-    if info.manifest.effective_lifecycle().install.is_none() {
-        return Err(RxError::Other("script has no install lifecycle".into()));
+    let is_sandbox = info.manifest.sandbox.is_some();
+    let block = info.manifest.current_block();
+    if block.is_none() {
+        return Err(RxError::Other("script does not support the current platform".into()));
+    }
+    if !is_sandbox && block.and_then(|b| b.install.as_ref()).is_none() {
+        return Err(RxError::Other("script has no install command for this platform".into()));
     }
     runner::spawn_install(app, Arc::clone(&state), info.manifest, path).await
 }
@@ -197,8 +202,12 @@ async fn do_uninstall(
     let path = PathBuf::from(&dir);
     let info = scanner::load_script(&path)?;
     let is_sandbox = info.manifest.sandbox.is_some();
-    if !is_sandbox && info.manifest.effective_lifecycle().uninstall.is_none() {
-        return Err(RxError::Other("script has no uninstall lifecycle".into()));
+    let block = info.manifest.current_block();
+    if block.is_none() {
+        return Err(RxError::Other("script does not support the current platform".into()));
+    }
+    if !is_sandbox && block.and_then(|b| b.uninstall.as_ref()).is_none() {
+        return Err(RxError::Other("script has no uninstall command for this platform".into()));
     }
     runner::spawn_uninstall(
         app,

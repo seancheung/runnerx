@@ -5,12 +5,11 @@ version: 0.1.0
 category: 文件批处理
 tags: [python, file]
 
-entry:
-  command: .venv/bin/python
-  args: [run.py]
-  argsMode: stdin-json
-
-lifecycle:
+macos:
+  entry:
+    command: .venv/bin/python
+    args: [run.py]
+    argsMode: stdin-json
   install:
     command: ./install.sh
   uninstall:

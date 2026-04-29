@@ -39,26 +39,35 @@ pub struct EntrySpec {
     pub args_mode: ArgsMode,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// Per-platform configuration: entry plus optional lifecycle hooks (install /
+/// uninstall / preRun) live side-by-side at this level. There is no separate
+/// `lifecycle` wrapper — the four optional fields are siblings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Lifecycle {
+pub struct PlatformBlock {
+    pub entry: EntrySpec,
     pub install: Option<CommandSpec>,
     pub uninstall: Option<CommandSpec>,
     pub pre_run: Option<CommandSpec>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlatformOverride {
-    pub entry: Option<EntrySpec>,
-    pub lifecycle: Option<Lifecycle>,
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum PlatformId {
+    Macos,
+    Windows,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Platform {
-    pub windows: Option<PlatformOverride>,
-    pub macos: Option<PlatformOverride>,
+impl PlatformId {
+    pub fn current() -> Option<Self> {
+        if cfg!(target_os = "macos") {
+            Some(Self::Macos)
+        } else if cfg!(target_os = "windows") {
+            Some(Self::Windows)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -178,9 +187,13 @@ pub struct Manifest {
     /// surface is the image; everything else (entry, lifecycle, inputs, outputs)
     /// works the same way it does on the host.
     pub sandbox: Option<Sandbox>,
-    pub entry: EntrySpec,
-    pub platform: Option<Platform>,
-    pub lifecycle: Option<Lifecycle>,
+
+    /// Per-platform blocks. At least one of `macos` / `windows` must be present;
+    /// validated by the scanner. Resolution at runtime: the block matching the
+    /// current OS is used directly — there is no fallback / inheritance.
+    pub macos: Option<PlatformBlock>,
+    pub windows: Option<PlatformBlock>,
+
     #[serde(default)]
     pub inputs: Vec<InputSpec>,
     #[serde(default)]
@@ -188,50 +201,26 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    /// Resolve entry/lifecycle taking platform overrides into account.
-    pub fn effective_entry(&self) -> EntrySpec {
-        let override_entry = self.platform.as_ref().and_then(|p| {
-            #[cfg(target_os = "windows")]
-            {
-                p.windows.as_ref().and_then(|o| o.entry.clone())
-            }
-            #[cfg(target_os = "macos")]
-            {
-                p.macos.as_ref().and_then(|o| o.entry.clone())
-            }
-            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-            {
-                let _ = p;
-                None
-            }
-        });
-        override_entry.unwrap_or_else(|| self.entry.clone())
+    /// Block for the OS we're running on. None means "this manifest doesn't
+    /// support the current platform" — callers should refuse to run.
+    pub fn current_block(&self) -> Option<&PlatformBlock> {
+        match PlatformId::current()? {
+            PlatformId::Macos => self.macos.as_ref(),
+            PlatformId::Windows => self.windows.as_ref(),
+        }
     }
 
-    pub fn effective_lifecycle(&self) -> Lifecycle {
-        let from_platform: Option<Lifecycle> = self.platform.as_ref().and_then(|p| {
-            #[cfg(target_os = "windows")]
-            {
-                p.windows.as_ref().and_then(|o| o.lifecycle.clone())
-            }
-            #[cfg(target_os = "macos")]
-            {
-                p.macos.as_ref().and_then(|o| o.lifecycle.clone())
-            }
-            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-            {
-                let _ = p;
-                None
-            }
-        });
-        let base = self.lifecycle.clone().unwrap_or_default();
-        match from_platform {
-            None => base,
-            Some(over) => Lifecycle {
-                install: over.install.or(base.install),
-                uninstall: over.uninstall.or(base.uninstall),
-                pre_run: over.pre_run.or(base.pre_run),
-            },
+    /// All platform ids this manifest declares a block for. Used by the UI
+    /// to flag multi-platform scripts and to indicate when a script can't run
+    /// on the current OS.
+    pub fn supported_platforms(&self) -> Vec<PlatformId> {
+        let mut out = Vec::new();
+        if self.macos.is_some() {
+            out.push(PlatformId::Macos);
         }
+        if self.windows.is_some() {
+            out.push(PlatformId::Windows);
+        }
+        out
     }
 }

@@ -1,28 +1,26 @@
 # yaml-language-server: $schema=../../schema/manifest.schema.json
 name: 打包目录为 zip
-description: 把指定目录压缩为 zip 文件。同一份 manifest 在 macOS 上调用 sh + zip，在 Windows 上调用 PowerShell 的 Compress-Archive。
+description: 把指定目录压缩为 zip 文件。macOS 调用 sh + zip，Windows 调用 PowerShell 的 Compress-Archive。
 version: 0.1.0
 category: 文件批处理
 tags: [archive, cross-platform]
 
-# 默认入口（macOS / Linux）
-entry:
-  command: ./run.sh
-  argsMode: env
+macos:
+  entry:
+    command: ./run.sh
+    argsMode: env
 
-# Windows 上整个换成 PowerShell 入口
-platform:
-  windows:
-    entry:
-      command: powershell.exe
-      args:
-        - "-NoProfile"
-        - "-NonInteractive"
-        - "-ExecutionPolicy"
-        - "Bypass"
-        - "-File"
-        - "run.ps1"
-      argsMode: env
+windows:
+  entry:
+    command: powershell.exe
+    args:
+      - "-NoProfile"
+      - "-NonInteractive"
+      - "-ExecutionPolicy"
+      - "Bypass"
+      - "-File"
+      - "run.ps1"
+    argsMode: env
 
 inputs:
   - id: source_dir

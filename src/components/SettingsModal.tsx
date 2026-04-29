@@ -278,9 +278,9 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
                     }));
                   }}
                 >
-                  <option value="default">服务端默认（不发送 thinking 字段）</option>
-                  <option value="enabled">启用（thinking.type = "enabled"）</option>
-                  <option value="disabled">禁用（thinking.type = "disabled"）</option>
+                  <option value="default">默认</option>
+                  <option value="enabled">启用</option>
+                  <option value="disabled">禁用</option>
                 </select>
                 <div className="field-desc">
                   请求体里追加 <code>{'{"thinking":{"type":"enabled|disabled"}}'}</code>。

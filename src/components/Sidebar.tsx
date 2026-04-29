@@ -79,19 +79,29 @@ export function Sidebar({
           grouped.map(([cat, items]) => (
             <div key={cat}>
               <div className="sidebar-category">{cat}</div>
-              {items.map((s) => (
-                <div
-                  key={s.id}
-                  className={"sidebar-item" + (s.id === selectedId ? " active" : "")}
-                  onClick={() => onSelect(s.id)}
-                >
-                  <IconBlock script={s} />
-                  <div className="sidebar-item-name">{s.manifest.name}</div>
-                  {!s.installed && s.manifest.lifecycle?.install && (
-                    <span className="sidebar-item-tag">未安装</span>
-                  )}
-                </div>
-              ))}
+              {items.map((s) => {
+                const supports = s.supportedOnCurrentPlatform;
+                const hasInstallOnCurrent =
+                  (s.manifest.macos?.install || s.manifest.windows?.install) != null;
+                return (
+                  <div
+                    key={s.id}
+                    className={
+                      "sidebar-item"
+                      + (s.id === selectedId ? " active" : "")
+                      + (!supports ? " disabled" : "")
+                    }
+                    onClick={() => onSelect(s.id)}
+                    title={!supports ? "该脚本不支持当前平台" : undefined}
+                  >
+                    <IconBlock script={s} />
+                    <div className="sidebar-item-name">{s.manifest.name}</div>
+                    {supports && !s.installed && hasInstallOnCurrent && (
+                      <span className="sidebar-item-tag">未安装</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ))
         )}

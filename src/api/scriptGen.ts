@@ -2,7 +2,7 @@ import { chat, LlmError, type ChatDeltaKind, type ChatMessage } from "./llm";
 import type { LlmConfig } from "../types/config";
 import SYSTEM_PROMPT from "./scriptAuthor.prompt.txt?raw";
 
-export type Platform = "windows" | "macos" | "linux";
+export type Platform = "windows" | "macos";
 
 export interface GeneratedFile {
   path: string;
@@ -19,14 +19,13 @@ export interface GeneratedScript {
 export function detectPlatform(): Platform {
   const ua = navigator.userAgent.toLowerCase();
   if (ua.includes("windows")) return "windows";
-  if (ua.includes("mac os x") || ua.includes("macintosh")) return "macos";
-  return "linux";
+  // 应用本身只发布 macOS 和 Windows 版；其它环境（dev on linux 等）默认按 macOS 出
+  return "macos";
 }
 
 const PLATFORM_LABEL: Record<Platform, string> = {
   windows: "Windows（PowerShell）",
   macos: "macOS（bash 3.2）",
-  linux: "Linux（bash）",
 };
 
 export interface ExistingFile {
@@ -63,10 +62,10 @@ export async function editScript(
         `${existingBlock}\n\n` +
         `修改请求：\n${args.instruction.trim()}\n\n` +
         `请输出修改后**完整的 \`<script>\` 块**：所有未改动的文件也要原样写出，不要省略，也不要写"unchanged"等占位。\n` +
-        `当前用户平台：${platformLabel}；如顶层 entry 命令需调整，请适配该平台。\n` +
+        `当前用户平台：${platformLabel}；如平台块的 entry 命令需调整，请适配该平台。\n` +
         `\`<script>\` 的 \`id\` **必须保留为 \`${args.originalId}\`**（除非修改请求里明确要求改名为新的 kebab-case id）。\n` +
-        `**只在原脚本已经使用 \`platform\` 字段，或修改请求明确要求"跨平台"/"多平台"** 时才保留/添加 \`platform\` 覆盖；` +
-        `否则不要添加新的 \`platform\` 字段。\n` +
+        `**只在原脚本已经声明了多个平台块，或修改请求明确要求"跨平台"/"多平台"** 时才同时输出 \`macos\` 和 \`windows\` 两个块；` +
+        `否则保持原脚本的平台覆盖范围（单平台就维持单平台）。\n` +
         `**只在原脚本已经使用 \`sandbox\` 字段，或修改请求明确要求"沙盒"/"docker"/"容器隔离"** 时才保留/添加 \`sandbox\`；` +
         `否则不要添加新的 \`sandbox\` 字段。\n\n` +
         `按照系统消息里的格式输出。`,
@@ -97,11 +96,9 @@ export async function generateScript(
       role: "user",
       content:
         `请帮我创建一个 runnerx 脚本，需求如下：\n\n${description.trim()}\n\n` +
-        `当前用户平台：${platformLabel}。请把顶层 entry 写成该平台原生可运行的命令。\n` +
-        `**不要**添加 \`platform\` 覆盖字段，除非上面的需求里明确要求"跨平台"/"多平台"/"Windows 和 macOS 都能跑"等多平台兼容；` +
-        `没有明确要求多平台时，只针对当前平台生成单平台脚本即可。\n` +
-        `**不要**添加 \`sandbox\` 字段，除非上面的需求里明确要求"沙盒"/"docker"/"容器隔离"/"sandbox"等；` +
-        `没有明确要求时，让脚本直接在宿主机上运行。\n\n` +
+        `当前用户平台：${platformLabel}。如果是单平台脚本，**只输出对应的那一个平台块**（${platform === "windows" ? "windows" : "macos"}）。\n` +
+        `**默认单平台**：除非上面的需求里明确要求"跨平台"/"多平台"/"Windows 和 macOS 都能跑"，否则只生成一个平台块。\n` +
+        `**默认不沙盒**：除非上面的需求里明确要求"沙盒"/"docker"/"容器隔离"/"sandbox"，否则不要写 \`sandbox\` 字段。\n\n` +
         `按照系统消息里的格式输出。`,
     },
   ];

@@ -99,8 +99,8 @@ pub async fn spawn_sandbox_install(
     let cname = container_name(&run_id);
 
     // User's install lifecycle (if any) runs inside the container at WORK_DIR.
-    let lifecycle = manifest.effective_lifecycle();
-    let install_step = match lifecycle.install {
+    let install_cmd = manifest.current_block().and_then(|b| b.install.clone());
+    let install_step = match install_cmd {
         Some(c) => {
             let cmd_line = std::iter::once(c.command.clone())
                 .chain(c.args.into_iter())
@@ -199,8 +199,8 @@ pub async fn spawn_sandbox_uninstall(
 
     // Run user's uninstall lifecycle (if any) inside a one-shot container based
     // on the installed image, so they can clean up state living in the image fs.
-    let lifecycle = manifest.effective_lifecycle();
-    let user_uninstall_step = match lifecycle.uninstall {
+    let uninstall_cmd = manifest.current_block().and_then(|b| b.uninstall.clone());
+    let user_uninstall_step = match uninstall_cmd {
         Some(c) => {
             let cmd_line = std::iter::once(c.command.clone())
                 .chain(c.args.into_iter())
@@ -283,7 +283,10 @@ pub async fn spawn_sandbox_run(
         .clone()
         .ok_or_else(|| RxError::Other("install state missing image ref".into()))?;
 
-    let entry = manifest.effective_entry();
+    let block = manifest
+        .current_block()
+        .ok_or_else(|| RxError::Other("script does not support the current platform".into()))?;
+    let entry = block.entry.clone();
     let input_specs = manifest.inputs.clone();
 
     // 1) Translate inputs: collect mounts + container-side values.

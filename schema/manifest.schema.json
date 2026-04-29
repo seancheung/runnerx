@@ -3,7 +3,11 @@
   "$id": "https://runnerx.app/manifest.schema.json",
   "title": "runnerx script manifest",
   "type": "object",
-  "required": ["name", "entry"],
+  "required": ["name"],
+  "anyOf": [
+    { "required": ["macos"] },
+    { "required": ["windows"] }
+  ],
   "additionalProperties": false,
   "properties": {
     "name": { "type": "string", "minLength": 1, "description": "Display name shown in the script list." },
@@ -23,25 +27,8 @@
         "image": { "type": "string", "minLength": 1, "description": "Base Docker image (e.g. python:3.11-slim, node:20-alpine)." }
       }
     },
-    "entry": { "$ref": "#/definitions/entry" },
-    "platform": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Per-platform overrides for entry / lifecycle.",
-      "properties": {
-        "windows": { "$ref": "#/definitions/platformOverride" },
-        "macos": { "$ref": "#/definitions/platformOverride" }
-      }
-    },
-    "lifecycle": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "install": { "$ref": "#/definitions/command" },
-        "uninstall": { "$ref": "#/definitions/command" },
-        "preRun": { "$ref": "#/definitions/command" }
-      }
-    },
+    "macos": { "$ref": "#/definitions/platformBlock" },
+    "windows": { "$ref": "#/definitions/platformBlock" },
     "inputs": { "type": "array", "items": { "$ref": "#/definitions/input" } },
     "outputs": { "type": "array", "items": { "$ref": "#/definitions/output" } }
   },
@@ -74,20 +61,16 @@
         }
       }
     },
-    "platformOverride": {
+    "platformBlock": {
       "type": "object",
+      "required": ["entry"],
       "additionalProperties": false,
+      "description": "Per-platform configuration: entry plus optional install / uninstall / preRun hooks.",
       "properties": {
         "entry": { "$ref": "#/definitions/entry" },
-        "lifecycle": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "install": { "$ref": "#/definitions/command" },
-            "uninstall": { "$ref": "#/definitions/command" },
-            "preRun": { "$ref": "#/definitions/command" }
-          }
-        }
+        "install": { "$ref": "#/definitions/command" },
+        "uninstall": { "$ref": "#/definitions/command" },
+        "preRun": { "$ref": "#/definitions/command" }
       }
     },
     "whenClause": {

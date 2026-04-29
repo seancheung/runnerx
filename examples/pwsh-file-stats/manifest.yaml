@@ -1,24 +1,23 @@
 # yaml-language-server: $schema=../../schema/manifest.schema.json
 name: 文件大小统计
-description: 列出指定目录里最大的 N 个文件，按大小倒序输出表格。演示 PowerShell 入口 + platform 差异化覆盖。
+description: 列出指定目录里最大的 N 个文件，按大小倒序输出表格。演示 PowerShell 入口跨平台。
 version: 0.1.0
 category: 文件批处理
 tags: [powershell, file]
 
-# 默认入口走跨平台的 pwsh (PowerShell 7+)
-entry:
-  command: pwsh
-  args: ["-NoProfile", "-NonInteractive", "-File", "run.ps1"]
-  argsMode: env
+# macOS 上走 pwsh (PowerShell 7+，需用户预先 brew install --cask powershell)
+# macos:
+#   entry:
+#     command: pwsh
+#     args: ["-NoProfile", "-NonInteractive", "-File", "run.ps1"]
+#     argsMode: env
 
-# Windows 上覆盖为系统自带的 powershell.exe (Windows PowerShell 5.1)，
-# 这样最常见的 Windows 用户开箱即用，不必先装 PowerShell 7。
-platform:
-  windows:
-    entry:
-      command: powershell.exe
-      args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "run.ps1"]
-      argsMode: env
+# Windows 上用系统自带的 powershell.exe (Windows PowerShell 5.1)，开箱即用
+windows:
+  entry:
+    command: powershell.exe
+    args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "run.ps1"]
+    argsMode: env
 
 inputs:
   - id: target_dir

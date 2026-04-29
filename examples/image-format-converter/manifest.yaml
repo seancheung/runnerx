@@ -4,8 +4,9 @@ description: Convert images between common formats using ImageMagick.
 version: 1.0.0
 category: 媒体
 tags: [image, conversion, imagemagick]
-entry:
-  command: ./run.sh
+macos:
+  entry:
+    command: ./run.sh
 inputs:
   - id: input_file
     type: file

@@ -1,5 +1,5 @@
 use crate::error::{Result, RxError};
-use crate::manifest::Manifest;
+use crate::manifest::{Manifest, PlatformId};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,6 +40,11 @@ pub struct ScriptInfo {
     /// frontend can show it without an extra round-trip per script.
     pub icon_data_url: Option<String>,
     pub readme_path: Option<String>,
+    /// Platforms this manifest declares a block for. The UI uses this to flag
+    /// multi-platform scripts and to gray out scripts that can't run here.
+    pub supported_platforms: Vec<PlatformId>,
+    /// True if `supported_platforms` contains the OS we're running on.
+    pub supported_on_current_platform: bool,
 }
 
 /// Scan a single root directory; each immediate subdirectory containing a
@@ -105,6 +110,17 @@ pub fn load_script(dir: &Path) -> Result<ScriptInfo> {
             message: "cannot derive id".into(),
         })?;
 
+    let supported_platforms = manifest.supported_platforms();
+    if supported_platforms.is_empty() {
+        return Err(RxError::BadManifest {
+            dir: dir.display().to_string(),
+            message: "manifest must declare at least one platform block (`macos` or `windows`)".into(),
+        });
+    }
+    let supported_on_current_platform = PlatformId::current()
+        .map(|p| supported_platforms.contains(&p))
+        .unwrap_or(false);
+
     let install_state = read_install_state(dir);
     let installed = install_state.is_some();
     let icon_data_url = manifest
@@ -121,6 +137,8 @@ pub fn load_script(dir: &Path) -> Result<ScriptInfo> {
         install_state,
         icon_data_url,
         readme_path,
+        supported_platforms,
+        supported_on_current_platform,
     })
 }
 

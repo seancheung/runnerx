@@ -136,7 +136,10 @@ pub async fn spawn_run(
         return crate::sandbox::spawn_sandbox_run(app, state, manifest, script_dir, inputs, outputs).await;
     }
 
-    let entry = manifest.effective_entry();
+    let block = manifest
+        .current_block()
+        .ok_or_else(|| RxError::Other("script does not support the current platform".into()))?;
+    let entry = block.entry.clone();
     let cwd = resolve_cwd(&script_dir, entry.cwd.as_deref());
 
     let stdin_payload = if entry.args_mode == ArgsMode::StdinJson {
@@ -159,10 +162,13 @@ pub async fn spawn_install(
         return crate::sandbox::spawn_sandbox_install(app, state, manifest, script_dir).await;
     }
 
-    let lifecycle = manifest.effective_lifecycle();
-    let install = lifecycle
+    let block = manifest
+        .current_block()
+        .ok_or_else(|| RxError::Other("script does not support the current platform".into()))?;
+    let install = block
         .install
-        .ok_or_else(|| RxError::Other("no install lifecycle defined".into()))?;
+        .clone()
+        .ok_or_else(|| RxError::Other("no install command defined for this platform".into()))?;
     let cwd = resolve_cwd(&script_dir, install.cwd.as_deref());
     let mut command = build_base_command(&install, &script_dir);
     let dir_clone = script_dir.clone();
@@ -192,10 +198,13 @@ pub async fn spawn_uninstall(
         return crate::sandbox::spawn_sandbox_uninstall(app, state, manifest, script_dir, also_remove_base).await;
     }
 
-    let lifecycle = manifest.effective_lifecycle();
-    let uninstall = lifecycle
+    let block = manifest
+        .current_block()
+        .ok_or_else(|| RxError::Other("script does not support the current platform".into()))?;
+    let uninstall = block
         .uninstall
-        .ok_or_else(|| RxError::Other("no uninstall lifecycle defined".into()))?;
+        .clone()
+        .ok_or_else(|| RxError::Other("no uninstall command defined for this platform".into()))?;
     let cwd = resolve_cwd(&script_dir, uninstall.cwd.as_deref());
     let mut command = build_base_command(&uninstall, &script_dir);
     let dir_clone = script_dir.clone();
@@ -208,8 +217,8 @@ pub async fn spawn_uninstall(
 }
 
 pub async fn run_pre_run_sync(manifest: &Manifest, script_dir: &Path) -> Result<()> {
-    let lifecycle = manifest.effective_lifecycle();
-    let Some(spec) = lifecycle.pre_run else { return Ok(()); };
+    let Some(block) = manifest.current_block() else { return Ok(()); };
+    let Some(spec) = block.pre_run.clone() else { return Ok(()); };
     let cwd = resolve_cwd(script_dir, spec.cwd.as_deref());
     let mut cmd = build_base_command(&spec, script_dir);
     cmd.current_dir(&cwd).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());

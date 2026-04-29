@@ -4,9 +4,10 @@ description: 使用 ffmpeg 将视频转换为 H.264 或 H.265 格式，可选择
 version: "1.0.0"
 category: 媒体
 tags: [视频, ffmpeg, 转换]
-entry:
-  command: ./run.sh
-  shell: false
+macos:
+  entry:
+    command: ./run.sh
+    shell: false
 inputs:
   - id: input_file
     type: file

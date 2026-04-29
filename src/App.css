@@ -203,6 +203,29 @@ textarea {
   font-size: 10px;
   color: var(--text-muted);
 }
+.sidebar-item.disabled {
+  opacity: 0.45;
+}
+.sidebar-item.disabled .sidebar-item-name {
+  color: var(--text-muted);
+}
+
+.platform-badge {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.platform-badge-chip {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+}
 
 .icon-block {
   width: 28px;

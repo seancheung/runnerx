@@ -1,5 +1,7 @@
 export type ArgsMode = "env" | "argv" | "stdin-json";
 
+export type PlatformId = "macos" | "windows";
+
 export interface CommandSpec {
   command: string;
   args?: string[];
@@ -11,7 +13,8 @@ export interface EntrySpec extends CommandSpec {
   argsMode?: ArgsMode;
 }
 
-export interface Lifecycle {
+export interface PlatformBlock {
+  entry: EntrySpec;
   install?: CommandSpec;
   uninstall?: CommandSpec;
   preRun?: CommandSpec;
@@ -90,12 +93,8 @@ export interface Manifest {
   tags?: string[];
   readme?: string;
   sandbox?: Sandbox;
-  entry: EntrySpec;
-  platform?: {
-    windows?: { entry?: EntrySpec; lifecycle?: Lifecycle };
-    macos?: { entry?: EntrySpec; lifecycle?: Lifecycle };
-  };
-  lifecycle?: Lifecycle;
+  macos?: PlatformBlock;
+  windows?: PlatformBlock;
   inputs?: InputSpec[];
   outputs?: OutputSpec[];
 }
@@ -116,6 +115,8 @@ export interface ScriptInfo {
   installState?: InstallState;
   iconDataUrl?: string;
   readmePath?: string;
+  supportedPlatforms: PlatformId[];
+  supportedOnCurrentPlatform: boolean;
 }
 
 export type ResultPayload =
