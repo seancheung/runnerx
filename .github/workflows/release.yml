@@ -74,7 +74,7 @@ jobs:
 
             **Windows 首次打开**：未签名安装包会触发 SmartScreen 警告，
             选择"更多信息" → "仍要运行"。
-          releaseDraft: true
+          # releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
 

@@ -80,18 +80,38 @@ npm run tauri build
 
 ## manifest.yaml 速查
 
-最小结构：
+最小结构（顶层是平台无关元信息 + 一个或两个平台块；至少要声明 `macos` 或 `windows` 之一）：
 
 ```yaml
 # yaml-language-server: $schema=../../schema/manifest.schema.json
 name: 我的脚本
 description: 一句话说明
-entry:
-  command: ./run.sh
+
+macos:
+  entry:
+    command: ./run.sh
+
 inputs:
   - id: msg
     type: string
     required: true
+```
+
+平台块的字段是平铺的：`entry` 必填，`install` / `uninstall` / `preRun` 可选。当前应用只发布 macOS 和 Windows 版本，所以平台键只有这两个。运行时按当前 OS 选对应块；如果当前 OS 没声明对应块，脚本在侧栏会被灰显标记为"不支持当前平台"，无法安装/运行。
+
+跨平台脚本就同时写两个块：
+
+```yaml
+macos:
+  entry:
+    command: ./run.sh
+    argsMode: env
+
+windows:
+  entry:
+    command: powershell.exe
+    args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "run.ps1"]
+    argsMode: env
 ```
 
 完整 schema 见 [`schema/manifest.schema.json`](./schema/manifest.schema.json)。在 manifest 顶部加上 `# yaml-language-server: $schema=...` 即可在 VS Code 里得到补全和校验（先安装 [YAML 扩展](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml)）。
@@ -147,30 +167,25 @@ outputs:
 
 ## 生命周期
 
+`install` / `uninstall` / `preRun` 直接写在平台块内，和 `entry` 同级：
+
 ```yaml
-lifecycle:
-  install:   { command: ./install.sh }   # 一次性安装；成功后写 .runnerx-installed 标记
-  uninstall: { command: ./uninstall.sh } # 卸载；成功后清除 .runnerx-installed 标记
-  preRun:    { command: ./check.sh }     # 每次运行前同步执行；失败则阻断
+macos:
+  entry:     { command: ./run.sh }
+  install:   { command: ./install.sh }    # 一次性安装；成功后写 .runnerx-installed 标记
+  uninstall: { command: ./uninstall.sh }  # 卸载；成功后清除 .runnerx-installed 标记
+  preRun:    { command: ./check.sh }      # 每次运行前同步执行；失败则阻断
 ```
 
 `install` / `uninstall` 在前端有进度视图（和普通运行共用），输出走同一套 `@@runnerx` 协议。`preRun` 静默执行，stderr 在失败时反馈给用户。
 
 详情页右上的按钮组：
 
-- **安装 / 重新安装** — 跑 `lifecycle.install`，exit 0 才写入 `.runnerx-installed` 标记。
-- **卸载** — 跑 `lifecycle.uninstall`（若 manifest 定义了），exit 0 才清除标记；卸载失败时标记保留，便于诊断后重试。
+- **安装 / 重新安装** — 跑当前平台块的 `install`，exit 0 才写入 `.runnerx-installed` 标记。
+- **卸载** — 跑当前平台块的 `uninstall`（若声明了），exit 0 才清除标记；卸载失败时标记保留，便于诊断后重试。
 - **清除标记** — 不跑任何脚本，只删掉 `.runnerx-installed`。用作"我手动清干净了，让应用重新认为它没装"的兜底操作。
 
-可针对平台覆盖：
-
-```yaml
-platform:
-  windows:
-    entry: { command: run.ps1, shell: true }
-  macos:
-    entry: { command: ./run.sh }
-```
+跨平台脚本可以在两个平台块里各自声明独立的 `install` / `uninstall`，例如 macOS 用 `./install.sh`、Windows 用 `powershell.exe -File install.ps1`。各平台的安装/卸载逻辑互相独立、不共享。
 
 ---
 
@@ -186,7 +201,7 @@ platform:
 
 ## 沙盒模式 (Docker)
 
-在 manifest 顶部加 **`sandbox.image`** 一个字段，整个脚本就跑在 Docker 容器里——不影响其它字段写法（entry / lifecycle / inputs / outputs 都和 host 模式一样）。
+在 manifest 顶部加 **`sandbox.image`** 一个字段，整个脚本就跑在 Docker 容器里——不影响其它字段写法（平台块里的 entry / install / uninstall / preRun 以及 inputs / outputs 都和 host 模式一样）。
 
 ```yaml
 sandbox:
@@ -253,9 +268,9 @@ sandbox:
 
 - `echo-demo` — 演示所有输入类型 + when 联动 + 完整协议输出。
 - `ffmpeg-extract-audio` — 真实可用：调 ffmpeg 解码音轨，按 ffmpeg 的 `-progress` 流推进进度条。
-- `python-batch-rename` — 演示 `install` lifecycle（创建 venv）+ `argsMode: stdin-json`。
-- `pwsh-file-stats` — PowerShell 入门：演示 `platform` 字段差异化（Windows 用自带 `powershell.exe`，其它平台用 `pwsh`），以及手动构造 JSON 协议（绕开 PS 5.1 `ConvertTo-Json` 的嵌套数组限制）。
-- `archive-folder` — 真跨平台示例：**同一个 manifest，macOS 走 `run.sh` + `zip`，Windows 走 `run.ps1` + `Compress-Archive`**。两套独立实现，相同输入产出等价的 zip。
+- `python-batch-rename` — 演示平台块里的 `install` 钩子（创建 venv）+ `argsMode: stdin-json`。
+- `pwsh-file-stats` — PowerShell 入门：演示在两个平台块里分别配置 PowerShell 解释器（macOS 用 `pwsh`、Windows 用自带 `powershell.exe`），以及手动构造 JSON 协议（绕开 PS 5.1 `ConvertTo-Json` 的嵌套数组限制）。
+- `archive-folder` — 真跨平台示例：**同一个 manifest 里写 macos 和 windows 两个平台块，macOS 走 `run.sh` + `zip`，Windows 走 `run.ps1` + `Compress-Archive`**。两套独立实现，相同输入产出等价的 zip。
 - `archive-folder-sandboxed` — 沙盒模式示例：和 `archive-folder` 同样把目录打包为 zip，但跑在 `alpine:3.20` 容器里，install 时 `apk add zip`。这个场景天然契合沙盒（输入 ro 读取 + 输出 rw 中转）。
 
 启动应用后在设置里把脚本目录指到本仓库的 `examples/` 即可立即试用。
