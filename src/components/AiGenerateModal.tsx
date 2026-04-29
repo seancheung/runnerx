@@ -115,10 +115,9 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <div
         className="modal"
-        onClick={(e) => e.stopPropagation()}
         style={{ width: "min(820px, 92vw)", maxWidth: "none", maxHeight: "85vh", overflowY: "auto" }}
       >
         <h3>AI 创建脚本</h3>

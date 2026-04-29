@@ -60,7 +60,9 @@ entry:                     # 必填，作为脚本的默认入口（通常是用
 # 平台覆盖（可选；只有需要跨平台时才加。每项都是对顶层 entry / lifecycle 的覆盖，不是替代）
 platform:
   windows:
-    entry: { command: run.ps1, shell: true }
+    entry:
+      command: powershell.exe                # 或 pwsh（PowerShell 7+，需用户自行安装）
+      args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "run.ps1"]
   macos:
     entry: { command: ./run.sh }
 
@@ -147,7 +149,15 @@ options:
 - **默认单平台**：除非用户在需求里明确要求"跨平台"/"多平台"/"Windows 和 macOS 都能跑"等，**否则不要写 \`platform\` 字段**，只生成针对当前平台的单平台脚本。
 - **默认不沙盒**：除非用户在需求里明确要求"沙盒"/"docker"/"容器隔离"/"sandbox"等，**否则不要写 \`sandbox\` 字段**，让脚本直接跑在宿主机上。
 - 跨平台脚本（仅在用户明确要求时）：仍然要写顶层 \`entry\`，再用 \`platform.windows\` / \`platform.macos\` / \`platform.linux\` 覆盖其它平台；\`platform.<os>.entry\` 只是覆盖，不能替代顶层 \`entry\`，缺失顶层 \`entry\` 会导致脚本加载失败。
-- bash 脚本第一行写 shebang \`#!/usr/bin/env bash\`；用 \`set -euo pipefail\`。Windows 平台用 \`run.ps1\`，配合 \`entry.shell: true\`。
+- bash 脚本第一行写 shebang \`#!/usr/bin/env bash\`；用 \`set -euo pipefail\`。
+- Windows 平台用 \`run.ps1\`，**不要**靠 \`shell: true\` 直接把 \`.ps1\` 当 command — \`shell: true\` 在 Windows 下走的是 \`cmd /C\`，\`cmd\` 不会执行 \`.ps1\` 文件。正确写法是把 PowerShell 解释器作为 command，把脚本路径作为 \`-File\` 参数：
+  \`\`\`yaml
+  entry:
+    command: powershell.exe                # 系统自带的 Windows PowerShell 5.1，开箱即用
+    args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "run.ps1"]
+    argsMode: env
+  \`\`\`
+  如果脚本里用了 PowerShell 7+ 的特性（如三元运算符 \`?:\`、\`ForEach-Object -Parallel\`），改用 \`command: pwsh\`，并在 README 里提示用户先装 PowerShell 7。
 - 引用环境变量时大写，e.g. \`"\${RUNNERX_TITLE:-default}"\`（PowerShell 用 \`$env:RUNNERX_TITLE\`）。
 - 推进进度条：每步打印一行 \`@@runnerx progress {"value":<0~1>,"message":"..."}\`；务必输出严格合法 JSON（特别注意 \`bc\` 的 \`.5\` 这种无前导 0 的小数会破坏 JSON，用 \`printf '%.4f'\` 套一层）。
 - 写有意义的 description；分类放在 \`category\`，常见分类：媒体、数据、文件、系统、开发、示例。

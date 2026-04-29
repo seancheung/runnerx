@@ -180,10 +180,9 @@ export function AiEditModal({ script, root, onClose, onSaved }: Props) {
     (!saveAsConflict || overwriteOnSaveAs);
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
       <div
         className="modal"
-        onClick={(e) => e.stopPropagation()}
         style={{ width: "min(820px, 92vw)", maxWidth: "none", maxHeight: "85vh", overflowY: "auto" }}
       >
         <h3>AI 修改脚本 · <code>{originalId}</code></h3>

@@ -98,10 +98,9 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
     llmEnabled && (!llm.apiKey.trim() || !llm.model.trim() || !llm.baseUrl.trim());
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div
         className="modal"
-        onClick={(e) => e.stopPropagation()}
         style={{ maxHeight: "85vh", overflowY: "auto" }}
       >
         <h3>设置</h3>
