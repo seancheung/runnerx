@@ -118,9 +118,10 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
     <div className="modal-backdrop">
       <div
         className="modal"
-        style={{ width: "min(820px, 92vw)", maxWidth: "none", maxHeight: "85vh", overflowY: "auto" }}
+        style={{ width: "min(820px, 92vw)", maxWidth: "none" }}
       >
         <h3>AI 创建脚本</h3>
+        <div className="modal-body">
 
         {!llmReady ? (
           <div className="field-desc">加载配置中…</div>
@@ -203,6 +204,7 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
           </>
         )}
 
+        </div>
         <div className="modal-actions">
           <button type="button" onClick={onCancel}>
             {phase.kind === "done" ? "关闭" : "取消"}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 import * as api from "../api";
 import type { ThemePreference } from "../store";
 import {
@@ -59,6 +60,17 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
     if (typeof picked === "string") setRoot(picked);
   };
 
+  const openInFileManager = async () => {
+    const target = root.trim();
+    if (!target) return;
+    try {
+      await openPath(target);
+    } catch (err) {
+      console.error("openPath failed", err);
+      alert(`打开目录失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   const setNetwork = (network: SandboxNetwork) => {
     setConfig((c) => ({ ...c, sandbox: { ...c.sandbox, network } }));
   };
@@ -99,11 +111,9 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
 
   return (
     <div className="modal-backdrop">
-      <div
-        className="modal"
-        style={{ maxHeight: "85vh", overflowY: "auto" }}
-      >
+      <div className="modal">
         <h3>设置</h3>
+        <div className="modal-body">
 
         <div className="field">
           <label className="field-label">脚本目录</label>
@@ -114,6 +124,14 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
               placeholder="/path/to/your/scripts"
             />
             <button type="button" onClick={browse}>浏览…</button>
+            <button
+              type="button"
+              onClick={openInFileManager}
+              disabled={!root.trim()}
+              title="在系统文件管理器中打开脚本目录"
+            >
+              打开
+            </button>
             <button
               type="button"
               onClick={onReset}
@@ -142,54 +160,38 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
 
         <div className="field">
           <label className="field-label">深色模式</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-            <RadioRow
-              checked={theme === "system"}
-              onChange={() => onThemeChange("system")}
-              label="跟随系统（默认）"
-              hint="根据系统外观自动切换"
-            />
-            <RadioRow
-              checked={theme === "dark"}
-              onChange={() => onThemeChange("dark")}
-              label="深色"
-              hint="始终使用深色界面"
-            />
-            <RadioRow
-              checked={theme === "light"}
-              onChange={() => onThemeChange("light")}
-              label="浅色"
-              hint="始终使用浅色界面"
-            />
+          <select
+            value={theme}
+            onChange={(e) => onThemeChange(e.target.value as ThemePreference)}
+          >
+            <option value="system">跟随系统（默认）</option>
+            <option value="dark">深色</option>
+            <option value="light">浅色</option>
+          </select>
+          <div className="field-desc">
+            {theme === "system" && "根据系统外观自动切换；立即生效，无需保存。"}
+            {theme === "dark" && "始终使用深色界面；立即生效，无需保存。"}
+            {theme === "light" && "始终使用浅色界面；立即生效，无需保存。"}
           </div>
-          <div className="field-desc">立即生效，无需保存。</div>
         </div>
 
         <div className="field-section-title">沙盒</div>
 
         <div className="field">
           <label className="field-label">运行时网络</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-            <RadioRow
-              checked={config.sandbox.network === "bridge"}
-              onChange={() => setNetwork("bridge")}
-              label="Bridge — 允许沙盒脚本访问外网（默认）"
-              hint="脚本能 curl / pip / npm，跟运行普通命令时一样"
-            />
-            <RadioRow
-              checked={config.sandbox.network === "none"}
-              onChange={() => setNetwork("none")}
-              label="None — 完全无网络"
-              hint="最严格隔离；只能跑纯计算 / 离线工具"
-            />
-            <RadioRow
-              checked={config.sandbox.network === "host"}
-              onChange={() => setNetwork("host")}
-              label="Host — 共享宿主机网络"
-              hint="脚本能访问 localhost 上的服务；macOS Docker Desktop 上有局限"
-            />
-          </div>
+          <select
+            value={config.sandbox.network}
+            onChange={(e) => setNetwork(e.target.value as SandboxNetwork)}
+          >
+            <option value="bridge">Bridge — 允许沙盒脚本访问外网（默认）</option>
+            <option value="none">None — 完全无网络</option>
+            <option value="host">Host — 共享宿主机网络</option>
+          </select>
           <div className="field-desc">
+            {config.sandbox.network === "bridge" && "脚本能 curl / pip / npm，跟运行普通命令时一样。"}
+            {config.sandbox.network === "none" && "最严格隔离；只能跑纯计算 / 离线工具。"}
+            {config.sandbox.network === "host" && "脚本能访问 localhost 上的服务；macOS Docker Desktop 上有局限。"}
+            {" "}
             只影响 sandbox 模式脚本的 <code>run</code> 阶段。<code>install</code> 总是用 bridge（拉镜像 / pip 装包必须联网）。
           </div>
         </div>
@@ -289,6 +291,7 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
           </>
         )}
 
+        </div>
         <div className="modal-actions">
           <button type="button" onClick={onClose}>取消</button>
           <button
@@ -306,21 +309,3 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
   );
 }
 
-function RadioRow({
-  checked, onChange, label, hint,
-}: { checked: boolean; onChange: () => void; label: string; hint: string }) {
-  return (
-    <label style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
-      <input
-        type="radio"
-        checked={checked}
-        onChange={onChange}
-        style={{ width: "auto", marginTop: 3 }}
-      />
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, color: "var(--text)" }}>{label}</div>
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{hint}</div>
-      </div>
-    </label>
-  );
-}

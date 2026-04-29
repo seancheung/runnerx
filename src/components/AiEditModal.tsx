@@ -183,9 +183,10 @@ export function AiEditModal({ script, root, onClose, onSaved }: Props) {
     <div className="modal-backdrop">
       <div
         className="modal"
-        style={{ width: "min(820px, 92vw)", maxWidth: "none", maxHeight: "85vh", overflowY: "auto" }}
+        style={{ width: "min(820px, 92vw)", maxWidth: "none" }}
       >
         <h3>AI 修改脚本 · <code>{originalId}</code></h3>
+        <div className="modal-body">
 
         {!llmReady || phase.kind === "loading" ? (
           <div className="field-desc">加载中…</div>
@@ -269,6 +270,7 @@ export function AiEditModal({ script, root, onClose, onSaved }: Props) {
           </>
         )}
 
+        </div>
         <div className="modal-actions">
           <button type="button" onClick={onCancel}>
             {phase.kind === "done" ? "关闭" : "取消"}
