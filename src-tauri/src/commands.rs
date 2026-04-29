@@ -272,7 +272,10 @@ pub fn validate_manifest(yaml: String) -> Result<Manifest> {
 pub struct WriteFile {
     pub path: String,
     pub content: String,
+    // 仅在 Unix 上用于 0o755 标记；Windows 没有 mode 概念，故此字段在 Windows 编译里
+    // 不会被读到，直接 #[allow(dead_code)] 抑制告警。
     #[serde(default)]
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub executable: bool,
 }
 

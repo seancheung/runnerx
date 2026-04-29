@@ -54,6 +54,39 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # 把 git tag（去掉 v 前缀）写进 tauri.conf.json / package.json / Cargo.toml。
+      # 这样 dmg / msi / nsis 的文件名就和 tag 对齐，而不是 manifest 里写死的版本。
+      # 必须放在 `npm ci` 之后：ci 会校验 package.json 与 lockfile 的版本一致，
+      # 提前改 package.json 会让 ci 失败。tauri-action 跑 `npm run build`（vite）
+      # 不再触发 ci，所以这时候改 package.json 是安全的。
+      # workflow_dispatch 手动触发时跳过（github.ref_name 可能是分支名）。
+      - name: Set version from git tag (Unix)
+        if: startsWith(github.ref, 'refs/tags/v') && runner.os != 'Windows'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Setting version to $VERSION"
+          node -e "const f='src-tauri/tauri.conf.json';const o=require('./'+f);o.version='$VERSION';require('fs').writeFileSync(f,JSON.stringify(o,null,2)+'\n')"
+          node -e "const f='package.json';const o=require('./'+f);o.version='$VERSION';require('fs').writeFileSync(f,JSON.stringify(o,null,2)+'\n')"
+          # Cargo.toml 只改 [package] 那个 version 行（第一个匹配）
+          sed -i.bak -E '0,/^version = "[^"]*"/s//version = "'"$VERSION"'"/' src-tauri/Cargo.toml && rm src-tauri/Cargo.toml.bak
+
+      - name: Set version from git tag (Windows)
+        if: startsWith(github.ref, 'refs/tags/v') && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          Write-Host "Setting version to $version"
+          $f = 'src-tauri/tauri.conf.json'
+          $o = Get-Content $f -Raw | ConvertFrom-Json
+          $o.version = $version
+          ($o | ConvertTo-Json -Depth 100) + "`n" | Set-Content $f -NoNewline
+          $f = 'package.json'
+          $o = Get-Content $f -Raw | ConvertFrom-Json
+          $o.version = $version
+          ($o | ConvertTo-Json -Depth 100) + "`n" | Set-Content $f -NoNewline
+          (Get-Content src-tauri/Cargo.toml) -replace '^version = ".*"$', "version = `"$version`"" | Set-Content src-tauri/Cargo.toml
+
       - name: Build & upload artifacts
         uses: tauri-apps/tauri-action@v0
         env:

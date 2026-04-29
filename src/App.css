@@ -494,3 +494,18 @@ textarea {
 }
 .readme code { font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; }
 .readme p code { background: var(--bg-elev-2); padding: 1px 4px; border-radius: 3px; }
+.readme table {
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 12px;
+  display: block;
+  overflow-x: auto;
+}
+.readme th, .readme td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.readme th { background: var(--bg-elev-2); font-weight: 600; }
+.readme tr:nth-child(even) td { background: var(--bg-elev); }

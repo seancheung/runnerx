@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import * as api from "../api";
 import type { ScriptInfo } from "../types/manifest";
 import { DynamicForm, type FormValues } from "./DynamicForm";
@@ -136,7 +137,7 @@ export function ScriptDetail({
             <DynamicForm manifest={m} disabled={formDisabled} onSubmit={onStartRun} />
           ) : (
             <div className="readme">
-              {readme && <ReactMarkdown>{readme}</ReactMarkdown>}
+              {readme && <ReactMarkdown remarkPlugins={[remarkGfm]}>{readme}</ReactMarkdown>}
             </div>
           )}
         </div>
