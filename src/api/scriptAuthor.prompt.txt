@@ -186,3 +186,10 @@ set -euo pipefail
 - shell 脚本（`.sh`、`.py`、`.rb`、`.pl`）必须 `executable="true"`。
 - 不要用 markdown ``` ``` 包裹 `<script>` 块；直接写裸 XML。
 - 文件内容直接写在 `<file>` 标签之间，不要做任何 escape；`<` `>` 等 XML 字符不要替换成实体。解析器靠 `</file>` 行匹配。
+
+**修改现存脚本时（edit 流程）**：用户消息会附带 `<existing-file>` 列出当前所有文件。
+- 只输出**实际发生变更**的文件用 `<file>`，写完整内容（不是 diff / patch）。
+- 要删除的文件用自闭合标签 `<deleted-file path="..." />`，可写多个。
+- **未改动的文件不要重复输出**，应用会自动从原脚本继承。
+- 如果 `manifest.yaml` 没改动，就不要重复输出它。
+- 反之，**新建脚本时**必须输出完整的 `manifest.yaml` 和所有入口/README 文件。

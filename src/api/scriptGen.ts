@@ -14,6 +14,15 @@ export interface GeneratedScript {
   id: string;
   files: GeneratedFile[];
   rationale: string;
+  /** Paths the AI marked for deletion via `<deleted-file path="..." />`.
+   *  Only meaningful for edit flows; create flow ignores this. */
+  deletedPaths: string[];
+}
+
+export interface ExistingFileWithExec {
+  path: string;
+  content: string;
+  executable: boolean;
 }
 
 export function detectPlatform(): Platform {
@@ -61,7 +70,11 @@ export async function editScript(
         `我有一个现存的 runnerx 脚本（id=\`${args.originalId}\`），下面是它当前的所有文本文件（二进制如图标已省略）：\n\n` +
         `${existingBlock}\n\n` +
         `修改请求：\n${args.instruction.trim()}\n\n` +
-        `请输出修改后**完整的 \`<script>\` 块**：所有未改动的文件也要原样写出，不要省略，也不要写"unchanged"等占位。\n` +
+        `**只输出实际发生变更的文件**：\n` +
+        `- 修改的或新增的文件用普通的 \`<file path="...">…</file>\`，写完整内容（不是 patch / diff）。\n` +
+        `- 要删除的文件用自闭合标签 \`<deleted-file path="..." />\`，可写多个。\n` +
+        `- **未改动的文件不要输出**，应用会自动从原脚本里继承。\n` +
+        `- 如果 \`manifest.yaml\` 没改动，就不要输出它。\n` +
         `当前用户平台：${platformLabel}；如平台块的 entry 命令需调整，请适配该平台。\n` +
         `\`<script>\` 的 \`id\` **必须保留为 \`${args.originalId}\`**（除非修改请求里明确要求改名为新的 kebab-case id）。\n` +
         `**只在原脚本已经声明了多个平台块，或修改请求明确要求"跨平台"/"多平台"** 时才同时输出 \`macos\` 和 \`windows\` 两个块；` +
@@ -76,7 +89,40 @@ export async function editScript(
     onDelta: options.onDelta,
     maxTokens: 8192,
   });
-  return parseGeneratedScript(text);
+  return parseGeneratedScript(text, { requireManifest: false });
+}
+
+/**
+ * Merge AI-edited diff with the existing scripts files. Returns the full
+ * file set ready to write. Validates that `manifest.yaml` survives the merge
+ * (rejects the edit if both the existing file and the new output lack it).
+ *
+ * Rules:
+ * - Files in `parsed.deletedPaths` are dropped from the result.
+ * - Files in `parsed.files` replace existing files (or get added).
+ * - All other existing files are carried through unchanged.
+ */
+export function mergeEditWithExisting(
+  existing: ExistingFileWithExec[],
+  parsed: GeneratedScript,
+): GeneratedFile[] {
+  const deleted = new Set(parsed.deletedPaths);
+  const newPaths = new Set(parsed.files.map((f) => f.path));
+  const out: GeneratedFile[] = [];
+  for (const e of existing) {
+    if (deleted.has(e.path)) continue;
+    if (newPaths.has(e.path)) continue; // overridden below
+    out.push({ path: e.path, content: e.content, executable: e.executable });
+  }
+  for (const f of parsed.files) {
+    // Defensive: ignore a path the AI both edits and marks for deletion.
+    if (deleted.has(f.path)) continue;
+    out.push(f);
+  }
+  if (!out.some((f) => f.path === "manifest.yaml" || f.path === "manifest.yml")) {
+    throw new LlmError("修改后丢失 manifest.yaml — AI 标记删除或改名了 manifest，拒绝写入");
+  }
+  return out;
 }
 
 export async function generateScript(
@@ -148,7 +194,12 @@ export function applyTargetId(
   });
 }
 
-export function parseGeneratedScript(text: string): GeneratedScript {
+export function parseGeneratedScript(
+  text: string,
+  opts: { requireManifest?: boolean } = {},
+): GeneratedScript {
+  const requireManifest = opts.requireManifest ?? true;
+
   const planMatch = text.match(/<plan>([\s\S]*?)<\/plan>/i);
   const rationale = planMatch ? planMatch[1].trim() : "";
 
@@ -190,11 +241,28 @@ export function parseGeneratedScript(text: string): GeneratedScript {
     files.push({ path: pathAttr.trim(), content, executable });
   }
 
-  if (files.length === 0) {
-    throw new LlmError("AI 输出里没有任何 <file> 块");
+  // Self-closing or paired <deleted-file path="..." /> tags. Edit flow only.
+  const deletedPaths: string[] = [];
+  const deletedRe = /<deleted-file\b([^>]*?)\/?>(?:\s*<\/deleted-file>)?/gi;
+  while ((m = deletedRe.exec(inner)) !== null) {
+    const pathAttr = m[1].match(/\bpath\s*=\s*"([^"]+)"/i)?.[1];
+    if (!pathAttr) throw new LlmError("<deleted-file> 缺少 path 属性");
+    if (pathAttr.includes("..") || pathAttr.startsWith("/")) {
+      throw new LlmError(`非法 deleted path：${pathAttr}`);
+    }
+    deletedPaths.push(pathAttr.trim());
   }
-  if (!files.some((f) => f.path === "manifest.yaml" || f.path === "manifest.yml")) {
-    throw new LlmError("AI 输出缺少 manifest.yaml");
+
+  if (requireManifest) {
+    if (files.length === 0) {
+      throw new LlmError("AI 输出里没有任何 <file> 块");
+    }
+    if (!files.some((f) => f.path === "manifest.yaml" || f.path === "manifest.yml")) {
+      throw new LlmError("AI 输出缺少 manifest.yaml");
+    }
+  } else if (files.length === 0 && deletedPaths.length === 0) {
+    throw new LlmError("AI 没有产出任何变更（既无 <file> 也无 <deleted-file>）");
   }
-  return { id, files, rationale };
+
+  return { id, files, rationale, deletedPaths };
 }

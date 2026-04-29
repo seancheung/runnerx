@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
-import { applyTargetId, editScript, type GeneratedFile, type GeneratedScript } from "../api/scriptGen";
+import {
+  applyTargetId,
+  editScript,
+  mergeEditWithExisting,
+  type GeneratedFile,
+  type GeneratedScript,
+  type ExistingFileWithExec,
+} from "../api/scriptGen";
 import { LlmError } from "../api/llm";
 import type { AppConfig, LlmConfig } from "../types/config";
 import { LLM_PROVIDER_LABELS } from "../types/config";
 import type { ScriptInfo } from "../types/manifest";
 import { isValidScriptId, ScriptIdInput, StreamView } from "./AiGenerateModal";
 
-interface ExistingFile {
-  path: string;
-  content: string;
-}
+type ExistingFile = ExistingFileWithExec;
 
 interface Props {
   script: ScriptInfo;
@@ -54,7 +58,10 @@ export function AiEditModal({ script, root, onClose, onSaved }: Props) {
     }).catch(() => alive && setLlmReady(true));
     api.readScriptFiles(script.dir).then((files) => {
       if (!alive) return;
-      setPhase({ kind: "idle", files: files.map((f) => ({ path: f.path, content: f.content })) });
+      setPhase({
+        kind: "idle",
+        files: files.map((f) => ({ path: f.path, content: f.content, executable: f.executable })),
+      });
     }).catch((e) => {
       if (!alive) return;
       setPhase({ kind: "error", message: `读取脚本文件失败：${e instanceof Error ? e.message : String(e)}` });
@@ -108,11 +115,21 @@ export function AiEditModal({ script, root, onClose, onSaved }: Props) {
           }
         },
       });
+      // AI 只输出了变更文件 + 删除清单；这里合并出完整文件集，DiffPreview / 写入
+      // 都用合并后的列表（被删的文件在 newFiles 里就不存在了，DiffPreview 自动
+      // 把它们标为 removed）。
+      const mergedFiles = mergeEditWithExisting(files, result);
+      const merged: GeneratedScript = {
+        id: result.id,
+        files: mergedFiles,
+        rationale: result.rationale,
+        deletedPaths: result.deletedPaths,
+      };
       // Default the "save as" id to the AI's choice. If it equals originalId
       // (the common case when the AI keeps the id), suggest a -copy suffix so
       // the button is usable without forcing the user to type something.
       setSaveAsId(result.id === originalId ? `${originalId}-copy` : result.id);
-      setPhase({ kind: "preview", script: result, oldFiles: files });
+      setPhase({ kind: "preview", script: merged, oldFiles: files });
     } catch (e) {
       if (ctrl.signal.aborted) {
         setPhase({ kind: "idle", files });
