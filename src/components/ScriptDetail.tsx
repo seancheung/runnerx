@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AlertTriangle, Circle, CircleCheck, Shield, WandSparkles } from "lucide-react";
 import * as api from "../api";
 import type { ScriptInfo } from "../types/manifest";
 import { DynamicForm, type FormValues } from "./DynamicForm";
@@ -68,17 +69,29 @@ export function ScriptDetail({
             <PlatformBadge platforms={script.supportedPlatforms} always />
             {!supports && (
               <span style={{ color: "var(--danger)" }} title={unsupportedTitle}>
-                ⚠ 不支持当前平台
+                <AlertTriangle size={12} className="inline-icon" />
+                不支持当前平台
               </span>
             )}
             {isSandbox && (
               <span title={`Sandbox image: ${m.sandbox?.image}`} style={{ color: "var(--accent)" }}>
-                🛡 sandbox · {m.sandbox?.image}
+                <Shield size={12} className="inline-icon" />
+                sandbox · {m.sandbox?.image}
               </span>
             )}
             {hasInstall && (
               <span style={{ color: script.installed ? "var(--ok)" : "var(--warn)" }}>
-                {script.installed ? "● 已安装" : "○ 未安装"}
+                {script.installed ? (
+                  <>
+                    <CircleCheck size={12} className="inline-icon" />
+                    已安装
+                  </>
+                ) : (
+                  <>
+                    <Circle size={12} className="inline-icon" />
+                    未安装
+                  </>
+                )}
               </span>
             )}
           </div>
@@ -88,8 +101,9 @@ export function ScriptDetail({
             onClick={onAiEdit}
             disabled={isRunning}
             title="让 AI 根据自然语言修改这个脚本"
+            className="icon-button"
           >
-            AI 修改
+            <WandSparkles size={14} />
           </button>
           {hasInstall && (
             <button

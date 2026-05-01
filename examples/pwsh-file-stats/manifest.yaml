@@ -2,6 +2,7 @@
 name: 文件大小统计
 description: 列出指定目录里最大的 N 个文件，按大小倒序输出表格。演示 PowerShell 入口跨平台。
 version: 0.1.0
+appVersion: 0.3.0
 category: 文件批处理
 tags: [powershell, file]
 

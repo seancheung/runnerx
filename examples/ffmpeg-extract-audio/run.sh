@@ -4,7 +4,7 @@ set -euo pipefail
 input="${RUNNERX_INPUT_FILE:?missing INPUT_FILE}"
 format="${RUNNERX_FORMAT:-mp3}"
 bitrate="${RUNNERX_BITRATE:-192}"
-output="${RUNNERX_OUT_OUTPUT_FILE:?missing output path}"
+output="${RUNNERX_OUTPUT_FILE:?missing output path}"
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
   echo '@@runnerx log {"level":"error","message":"ffmpeg 未安装。请先安装 ffmpeg。"}'

@@ -2,6 +2,7 @@
 name: 提取音频
 description: 用 ffmpeg 从视频中提取音轨。
 version: 0.1.0
+appVersion: 0.3.0
 category: 媒体处理
 tags: [ffmpeg, audio]
 
@@ -40,5 +41,4 @@ outputs:
   - id: output_file
     label: 输出文件
     type: file
-    save: true
     accept: [".mp3", ".aac", ".wav"]

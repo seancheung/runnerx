@@ -455,7 +455,7 @@ fn build_command(
                 command.env(format!("RUNNERX_{}", key.to_uppercase()), env_value);
             }
             for (key, value) in outputs {
-                command.env(format!("RUNNERX_OUT_{}", key.to_uppercase()), value_to_string(value, None));
+                command.env(format!("RUNNERX_{}", key.to_uppercase()), value_to_string(value, None));
             }
         }
         ArgsMode::Argv => {

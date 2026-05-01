@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $src           = $env:RUNNERX_SOURCE_DIR
-$dst           = $env:RUNNERX_OUT_ARCHIVE
+$dst           = $env:RUNNERX_ARCHIVE
 $includeHidden = ($env:RUNNERX_INCLUDE_HIDDEN -eq '1')
 $compression   = if ([string]::IsNullOrWhiteSpace($env:RUNNERX_COMPRESSION)) { 'optimal' } else { $env:RUNNERX_COMPRESSION }
 

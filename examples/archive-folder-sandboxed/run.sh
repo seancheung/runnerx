@@ -3,7 +3,7 @@
 set -eu
 
 src="${RUNNERX_SOURCE_DIR:?missing source dir}"
-dst="${RUNNERX_OUT_ARCHIVE:?missing output path}"
+dst="${RUNNERX_ARCHIVE:?missing output path}"
 include_hidden="${RUNNERX_INCLUDE_HIDDEN:-0}"
 compression="${RUNNERX_COMPRESSION:-optimal}"
 

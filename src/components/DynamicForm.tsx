@@ -36,7 +36,7 @@ export function DynamicForm({ manifest, disabled, onSubmit }: Props) {
   }, [defaults, methods]);
 
   const inputs = manifest.inputs ?? [];
-  const outputs = (manifest.outputs ?? []).filter((o) => o.save);
+  const outputs = manifest.outputs ?? [];
 
   const handleRun = methods.handleSubmit((values) => {
     const visible = visibleInputIds(inputs, values.inputs as Record<string, unknown>);
@@ -87,7 +87,7 @@ function buildDefaults(manifest: Manifest): FormValues {
   }
   const outputs: Record<string, unknown> = {};
   for (const o of manifest.outputs ?? []) {
-    if (o.save) outputs[o.id] = "";
+    outputs[o.id] = "";
   }
   return { inputs, outputs };
 }
@@ -392,13 +392,17 @@ function DirectoryPicker({
 function OutputField({ spec, disabled }: { spec: OutputSpec; disabled: boolean }) {
   const { control } = useFormContext<FormValues>();
   const name = `outputs.${spec.id}` as const;
+  const required = spec.required ?? true;
   return (
     <div className="field">
-      <label className="field-label">{spec.label ?? spec.id}</label>
+      <label className="field-label">
+        {spec.label ?? spec.id}
+        {required && <span className="field-required">*</span>}
+      </label>
       <Controller
         control={control}
         name={name}
-        rules={{ required: spec.save ? "请选择保存路径" : undefined }}
+        rules={{ required: required ? "请选择保存路径" : undefined }}
         render={({ field }) => (
           <SaveTarget spec={spec} value={field.value as string} onChange={field.onChange} disabled={disabled} />
         )}

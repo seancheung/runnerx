@@ -2,6 +2,7 @@
 name: 协议示例
 description: 展示所有输入类型、when 联动、以及 @@runnerx 协议的进度/日志/结构化结果。
 version: 0.1.0
+appVersion: 0.3.0
 category: 示例
 tags: [demo, protocol]
 

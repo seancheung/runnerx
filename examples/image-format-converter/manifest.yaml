@@ -2,6 +2,7 @@ name: Image Format Converter
 id: image-format-converter
 description: Convert images between common formats using ImageMagick.
 version: 1.0.0
+appVersion: 0.3.0
 category: 媒体
 tags: [image, conversion, imagemagick]
 macos:
@@ -39,7 +40,6 @@ inputs:
 outputs:
   - id: output_file
     type: file
-    label: Save Converted Image As
+    label: Save As
     description: Location to save the converted image.
-    save: true
     accept: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"]

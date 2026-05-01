@@ -74,7 +74,7 @@ export interface OutputSpec {
   label?: string;
   description?: string;
   type: "file" | "directory" | "text";
-  save?: boolean;
+  required?: boolean;
   suggested?: string;
   accept?: string[];
 }
@@ -88,6 +88,10 @@ export interface Manifest {
   id?: string;
   description?: string;
   version?: string;
+  /** runnerx app version at the time the script was created. Stamped by the
+   *  AI flows; preserved across edits so future runtime checks can adapt to
+   *  schema/behavior drift. */
+  appVersion?: string;
   icon?: string;
   category?: string;
   tags?: string[];

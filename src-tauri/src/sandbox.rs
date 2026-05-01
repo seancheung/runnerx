@@ -23,7 +23,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tokio::process::Command;
 use uuid::Uuid;
 
@@ -432,20 +432,25 @@ pub async fn spawn_sandbox_run(
     };
 
     let tmp_root_for_exit = tmp_root.clone();
+    let app_for_exit = app.clone();
+    let run_id_for_exit = run_id.clone();
     let on_exit: BoxedExitHook = Box::new(move |code, cancelled| {
         if !cancelled && code == Some(0) {
             for (tmp_path, user_path) in &output_swap {
-                if tmp_path.exists() {
-                    if let Some(parent) = user_path.parent() {
-                        let _ = std::fs::create_dir_all(parent);
-                    }
-                    // Try rename first (same fs); fall back to copy + remove.
-                    if std::fs::rename(tmp_path, user_path).is_err() {
-                        if let Ok(bytes) = std::fs::read(tmp_path) {
-                            let _ = std::fs::write(user_path, bytes);
-                            let _ = std::fs::remove_file(tmp_path);
-                        }
-                    }
+                if !tmp_path.exists() { continue; }
+                if let Err(e) = move_output(tmp_path, user_path) {
+                    let _ = app_for_exit.emit(
+                        crate::runner::EVENT_RUN,
+                        crate::runner::RunEvent::Log {
+                            run_id: run_id_for_exit.clone(),
+                            level: "error".into(),
+                            message: format!(
+                                "写出输出失败 {}: {}",
+                                user_path.display(),
+                                e,
+                            ),
+                        },
+                    );
                 }
             }
         }
@@ -480,7 +485,7 @@ fn build_env_pairs(
         out.push((format!("RUNNERX_{}", key.to_uppercase()), value_to_string(value, spec)));
     }
     for (key, value) in outputs {
-        out.push((format!("RUNNERX_OUT_{}", key.to_uppercase()), value_to_string(value, None)));
+        out.push((format!("RUNNERX_{}", key.to_uppercase()), value_to_string(value, None)));
     }
     out
 }
@@ -551,4 +556,90 @@ fn scalar_to_string(value: &Value) -> String {
         Value::Number(n) => n.to_string(),
         Value::Array(_) | Value::Object(_) => value.to_string(),
     }
+}
+
+// =====================================================================
+// Output staging → user path move.
+//
+// The script writes into a host tmpdir bind-mounted at the container side.
+// On a successful run we relocate that staged content to the path the user
+// picked. Same-fs renames are zero-copy; the fallback path handles cross-fs
+// (Linux /tmp tmpfs), Windows (rename refuses to overwrite), directory
+// outputs, and pre-existing destination directories (merge-copy).
+// =====================================================================
+
+fn move_output(tmp: &Path, user: &Path) -> std::io::Result<()> {
+    if let Some(parent) = user.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    if tmp.is_dir() {
+        move_dir_output(tmp, user)
+    } else {
+        move_file_output(tmp, user)
+    }
+}
+
+fn move_file_output(tmp: &Path, user: &Path) -> std::io::Result<()> {
+    if user.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("目标路径是已存在的目录: {}", user.display()),
+        ));
+    }
+    if std::fs::rename(tmp, user).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(tmp, user)?;
+    let _ = std::fs::remove_file(tmp);
+    Ok(())
+}
+
+fn move_dir_output(tmp: &Path, user: &Path) -> std::io::Result<()> {
+    if user.exists() && !user.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("目标路径是已存在的文件: {}", user.display()),
+        ));
+    }
+    // Fast path: when the destination doesn't exist and we're on the same
+    // filesystem, rename moves the whole subtree atomically.
+    if !user.exists() && std::fs::rename(tmp, user).is_ok() {
+        return Ok(());
+    }
+    // Merge path: walk the staging tree and copy entries into `user`,
+    // overwriting same-named files. Files already present in `user` that
+    // weren't produced by this run are kept.
+    std::fs::create_dir_all(user)?;
+    copy_dir_recursive(tmp, user)?;
+    let _ = std::fs::remove_dir_all(tmp);
+    Ok(())
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        let ft = entry.file_type()?;
+        if ft.is_dir() {
+            std::fs::create_dir_all(&dst_path)?;
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else if ft.is_symlink() {
+            #[cfg(unix)]
+            {
+                let target = std::fs::read_link(&src_path)?;
+                if dst_path.symlink_metadata().is_ok() {
+                    let _ = std::fs::remove_file(&dst_path);
+                }
+                std::os::unix::fs::symlink(target, &dst_path)?;
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = src_path;
+            }
+        } else {
+            std::fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
 }

@@ -2,6 +2,7 @@
 name: 批量重命名
 description: 演示带有 install lifecycle 的 Python 脚本。基于正则把目录里的文件改名。
 version: 0.1.0
+appVersion: 0.3.0
 category: 文件批处理
 tags: [python, file]
 

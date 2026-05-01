@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Settings } from "lucide-react";
 import * as api from "../api";
 import {
+  applyAppVersion,
   applyTargetId,
   editScript,
+  getManifestField,
   mergeEditWithExisting,
   type GeneratedFile,
   type GeneratedScript,
@@ -15,6 +18,25 @@ import type { ScriptInfo } from "../types/manifest";
 import { isValidScriptId, ScriptIdInput, StreamView } from "./AiGenerateModal";
 
 type ExistingFile = ExistingFileWithExec;
+
+/**
+ * Carry the original manifest's `appVersion` over to the (possibly
+ * AI-rewritten) new manifest. The field tracks creation-time app version;
+ * editing should not bump it. If the original lacked the field (legacy
+ * script), nothing is added.
+ */
+function preserveAppVersion(
+  newFiles: GeneratedFile[],
+  oldFiles: ExistingFile[],
+): GeneratedFile[] {
+  const oldManifest = oldFiles.find(
+    (f) => f.path === "manifest.yaml" || f.path === "manifest.yml",
+  );
+  if (!oldManifest) return newFiles;
+  const original = getManifestField(oldManifest.content, "appVersion");
+  if (!original) return newFiles;
+  return applyAppVersion(newFiles, original, "overwrite");
+}
 
 interface Props {
   script: ScriptInfo;
@@ -144,7 +166,8 @@ export function AiEditModal({ script, root, onClose, onSaved }: Props) {
 
   const onOverwrite = async () => {
     if (phase.kind !== "preview" || !root) return;
-    const files = applyTargetId(phase.script.files, originalId);
+    let files = applyTargetId(phase.script.files, originalId);
+    files = preserveAppVersion(files, phase.oldFiles);
     setPhase({ kind: "writing" });
     try {
       const dir = await api.writeScriptFiles(
@@ -166,7 +189,8 @@ export function AiEditModal({ script, root, onClose, onSaved }: Props) {
     const newId = saveAsId.trim();
     if (!isValidScriptId(newId)) return;
     if (newId === originalId && !overwriteOnSaveAs) return;
-    const files = applyTargetId(phase.script.files, newId);
+    let files = applyTargetId(phase.script.files, newId);
+    files = preserveAppVersion(files, phase.oldFiles);
     setPhase({ kind: "writing" });
     try {
       const dir = await api.writeScriptFiles(
@@ -209,7 +233,7 @@ export function AiEditModal({ script, root, onClose, onSaved }: Props) {
           <div className="field-desc">加载中…</div>
         ) : !llm ? (
           <div className="field-desc" style={{ color: "var(--warn)" }}>
-            还没有配置 LLM API。请先到 ⚙ 设置里启用 AI 模型。
+            还没有配置 LLM API。请先到 <Settings size={12} className="inline-icon" /> 设置里启用 AI 模型。
           </div>
         ) : !root ? (
           <div className="field-desc" style={{ color: "var(--warn)" }}>
@@ -270,7 +294,8 @@ export function AiEditModal({ script, root, onClose, onSaved }: Props) {
             )}
             {phase.kind === "done" && (
               <div className="field-desc" style={{ color: "var(--ok)", whiteSpace: "pre-wrap" }}>
-                ✓ 已保存：<code>{phase.dir}</code>
+                <Check size={12} className="inline-icon" />
+                已保存：<code>{phase.dir}</code>
               </div>
             )}
             {phase.kind === "error" && (

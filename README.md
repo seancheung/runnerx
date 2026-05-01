@@ -139,11 +139,11 @@ windows:
 outputs:
   - id: output_file
     type: file        # file | directory | text
-    save: true        # 在运行前弹保存对话框，让用户选路径
+    required: true    # 默认 true；为 false 时允许用户留空，脚本可走自己的默认路径
     accept: [".mp3"]
 ```
 
-`save: true` 的输出会在表单里显示为路径选择器；选好的路径会和 inputs 一起传给脚本（前缀 `RUNNERX_OUT_`）。
+每个 output 都会在表单里显示为路径选择器（文件 → 保存对话框；目录 → 选目录对话框）。选好的路径会和 inputs 一起传给脚本（前缀 `RUNNERX_`，和输入共用同一前缀）。`required` 默认 `true`，必填项的标签会带 `*`；设为 `false` 表示可选，用户没填时环境变量为空字符串，脚本需自行兜底。如果脚本完全自己决定输出位置（写死路径或基于 input 推算），就不要声明 output——直接通过 `@@runnerx result` 把最终路径反馈给 UI 即可。
 
 ---
 
@@ -193,7 +193,7 @@ macos:
 
 `entry.argsMode` 可选：
 
-- `env`（默认）：每个输入字段以 `RUNNERX_<ID>` 形式存入环境变量；输出字段为 `RUNNERX_OUT_<ID>`。布尔值传 `1` / `0`，多文件用平台路径分隔符（`:` / `;`），多选 enum 用 `,`。
+- `env`（默认）：每个输入和输出字段都以 `RUNNERX_<ID>` 形式存入环境变量（输入和输出共用同一前缀，所以 inputs / outputs 的 id 不能重名）。布尔值传 `1` / `0`，多文件用平台路径分隔符（`:` / `;`），多选 enum 用 `,`。
 - `argv`：以 `--<id-kebab-case>=<value>` 形式追加到命令行；boolean 仅在 true 时传 `--<id>`。
 - `stdin-json`：把 `{"inputs": {...}, "outputs": {...}}` 一次性写到子进程 stdin 然后关闭。
 

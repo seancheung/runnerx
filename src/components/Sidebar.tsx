@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { RefreshCw, Search, Settings, Sparkles } from "lucide-react";
 import type { ScriptInfo } from "../types/manifest";
 import { IconBlock } from "./IconBlock";
 
@@ -20,6 +22,11 @@ export function Sidebar({
   onOpenAiGenerate,
 }: Props) {
   const [query, setQuery] = useState("");
+  const [version, setVersion] = useState<string>("");
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -48,25 +55,31 @@ export function Sidebar({
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-title">
-          <span>runnerx</span>
+          <span>
+            runnerx
+            {version && <span className="sidebar-version">v{version}</span>}
+          </span>
           <div style={{ display: "flex", gap: 4 }}>
-            <button
-              title="AI 创建脚本"
-              onClick={onOpenAiGenerate}
-              style={{ padding: "2px 8px", fontSize: 11 }}
-            >
-              AI创建
+            <button className="icon-button" title="AI 创建脚本" onClick={onOpenAiGenerate}>
+              <Sparkles size={14} />
             </button>
-            <button title="刷新" onClick={onRefresh} style={{ padding: "2px 8px", fontSize: 11 }}>↻</button>
-            <button title="设置" onClick={onOpenSettings} style={{ padding: "2px 8px", fontSize: 11 }}>⚙</button>
+            <button className="icon-button" title="刷新" onClick={onRefresh}>
+              <RefreshCw size={14} />
+            </button>
+            <button className="icon-button" title="设置" onClick={onOpenSettings}>
+              <Settings size={14} />
+            </button>
           </div>
         </div>
-        <input
-          className="sidebar-search"
-          placeholder="搜索脚本..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <div className="sidebar-search-wrap">
+          <Search size={13} className="sidebar-search-icon" />
+          <input
+            className="sidebar-search"
+            placeholder="搜索脚本..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
       </div>
       <div className="sidebar-list">
         {scripts.length === 0 ? (

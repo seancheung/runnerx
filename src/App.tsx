@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import "./App.css";
 import * as api from "./api";
 import { Sidebar } from "./components/Sidebar";
@@ -226,7 +227,10 @@ function App() {
         {scanErrors.length > 0 && (
           <div className="scan-errors">
             {scanErrors.map((e, i) => (
-              <div key={i}>⚠ {e.dir}: {e.message}</div>
+              <div key={i}>
+                <AlertTriangle size={14} className="inline-icon" />
+                {e.dir}: {e.message}
+              </div>
             ))}
           </div>
         )}

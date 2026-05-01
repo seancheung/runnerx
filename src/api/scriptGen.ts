@@ -164,18 +164,58 @@ export async function generateScript(
  *   (or at the top if `name:` isn't found).
  */
 export function rewriteManifestId(yaml: string, newId: string): string {
-  const re = /^id:[ \t].*$/m;
+  return upsertManifestField(yaml, "id", newId);
+}
+
+/**
+ * Read a top-level scalar field from a manifest.yaml. Returns the raw value
+ * (without quotes) or undefined if absent. Only matches lines starting at
+ * column 0 so nested fields under `inputs:` / `outputs:` are ignored.
+ */
+export function getManifestField(yaml: string, field: string): string | undefined {
+  const re = new RegExp(`^${field}:[ \\t]+(.*)$`, "m");
+  const m = yaml.match(re);
+  if (!m) return undefined;
+  return m[1].trim().replace(/^["']|["']$/g, "");
+}
+
+/**
+ * Insert or update a top-level scalar field. Existing field gets its value
+ * replaced; otherwise the field is appended after `name:` (or at the top if
+ * `name:` is missing). Same column-0 matching as `rewriteManifestId`.
+ */
+export function upsertManifestField(yaml: string, field: string, value: string): string {
+  const re = new RegExp(`^${field}:[ \\t].*$`, "m");
   if (re.test(yaml)) {
-    return yaml.replace(re, `id: ${newId}`);
+    return yaml.replace(re, `${field}: ${value}`);
   }
   const lines = yaml.split("\n");
   const insertAt = lines.findIndex((l) => /^name:[ \t]/.test(l));
   if (insertAt >= 0) {
-    lines.splice(insertAt + 1, 0, `id: ${newId}`);
+    lines.splice(insertAt + 1, 0, `${field}: ${value}`);
   } else {
-    lines.unshift(`id: ${newId}`);
+    lines.unshift(`${field}: ${value}`);
   }
   return lines.join("\n");
+}
+
+/**
+ * Stamp `appVersion: <appVersion>` into the manifest.yaml inside `files`.
+ * Used when creating a new script (records the app version at creation time)
+ * or when editing — to carry the original creation version over when the AI
+ * re-emits the manifest. Pass `mode: "preserve"` to leave existing values
+ * alone (edit flow); `"overwrite"` to force-set (create flow).
+ */
+export function applyAppVersion(
+  files: GeneratedFile[],
+  appVersion: string,
+  mode: "overwrite" | "preserve",
+): GeneratedFile[] {
+  return files.map((f) => {
+    if (f.path !== "manifest.yaml" && f.path !== "manifest.yml") return f;
+    if (mode === "preserve" && getManifestField(f.content, "appVersion")) return f;
+    return { ...f, content: upsertManifestField(f.content, "appVersion", appVersion) };
+  });
 }
 
 /**

@@ -14,6 +14,7 @@
     "id": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+$", "description": "Stable id. Defaults to the script directory name." },
     "description": { "type": "string" },
     "version": { "type": "string" },
+    "appVersion": { "type": "string", "description": "runnerx app version at script creation time. Stamped by AI flows; do not author manually." },
     "icon": { "type": "string", "description": "Path to a PNG (relative to script directory)." },
     "category": { "type": "string" },
     "tags": { "type": "array", "items": { "type": "string" } },
@@ -196,7 +197,7 @@
         "label": { "type": "string" },
         "description": { "type": "string" },
         "type": { "type": "string", "enum": ["file", "directory", "text"] },
-        "save": { "type": "boolean", "default": false, "description": "If true, prompt the user to choose a save path before running." },
+        "required": { "type": "boolean", "default": true, "description": "Whether the user must pick a path before running. When false, the user can leave it empty and the script receives an empty value." },
         "suggested": { "type": "string", "description": "Template for default path. Use {{input_id.stem|name|ext|path}}." },
         "accept": { "type": "array", "items": { "type": "string" } }
       }

@@ -2,6 +2,7 @@
 name: 打包目录为 zip（沙盒）
 description: 沙盒版的 archive-folder。同样把目录打包为 zip，但整个跑在 Alpine 容器里，输入目录强制 ro 挂载，输出 zip 通过临时挂载点回传到 host。
 version: 0.1.0
+appVersion: 0.3.0
 category: 文件批处理
 tags: [archive, sandbox]
 
@@ -40,5 +41,4 @@ outputs:
   - id: archive
     label: 输出 zip 文件
     type: file
-    save: true
     accept: [".zip"]

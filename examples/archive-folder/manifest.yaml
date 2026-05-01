@@ -2,6 +2,7 @@
 name: 打包目录为 zip
 description: 把指定目录压缩为 zip 文件。macOS 调用 sh + zip，Windows 调用 PowerShell 的 Compress-Archive。
 version: 0.1.0
+appVersion: 0.3.0
 category: 文件批处理
 tags: [archive, cross-platform]
 
@@ -46,5 +47,4 @@ outputs:
   - id: archive
     label: 输出 zip 文件
     type: file
-    save: true
     accept: [".zip"]

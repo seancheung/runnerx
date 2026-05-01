@@ -157,12 +157,14 @@ pub struct OutputSpec {
     pub description: Option<String>,
     #[serde(rename = "type")]
     pub ty: OutputType,
-    #[serde(default)]
-    pub save: bool,
+    #[serde(default = "default_true")]
+    pub required: bool,
     pub suggested: Option<String>,
     #[serde(default)]
     pub accept: Vec<String>,
 }
+
+fn default_true() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -178,6 +180,10 @@ pub struct Manifest {
     pub id: Option<String>,
     pub description: Option<String>,
     pub version: Option<String>,
+    /// runnerx app version at the time the script was created. Stamped by the
+    /// AI flows; preserved across edits so future runtime checks can adapt to
+    /// schema/behavior drift.
+    pub app_version: Option<String>,
     pub icon: Option<String>,
     pub category: Option<String>,
     #[serde(default)]

@@ -163,7 +163,39 @@ textarea {
   justify-content: space-between;
   align-items: center;
 }
-.sidebar-search { font-size: 12px; }
+.sidebar-version {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  line-height: 0;
+}
+.inline-icon {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+.sidebar-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.sidebar-search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.sidebar-search {
+  font-size: 12px;
+  padding-left: 26px;
+}
 .sidebar-list { overflow-y: auto; flex: 1; }
 .sidebar-empty {
   padding: 20px 14px;
@@ -269,6 +301,10 @@ textarea {
 .detail-header .desc { color: var(--text-dim); font-size: 13px; line-height: 1.4; }
 .detail-header .meta { color: var(--text-muted); font-size: 11px; margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
 .detail-header .actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.detail-header .actions > button:not(.icon-button) {
+  padding: 4px 10px;
+  font-size: 12px;
+}
 
 .detail-body {
   flex: 1;

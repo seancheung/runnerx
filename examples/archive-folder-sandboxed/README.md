@@ -15,7 +15,7 @@
 ## 为什么这个示例适合沙盒
 
 - **输入只读**：源目录被 ro 挂载，脚本无法意外修改它——而打包逻辑本来也只读它。
-- **输出可控**：`outputs[archive]` 标了 `save: true`，runnerx 在 host 临时目录开 rw 挂载点，跑完搬运。
+- **输出可控**：声明了 `outputs[archive]`，runnerx 在 host 临时目录开 rw 挂载点，跑完搬运到用户选的路径。
 - **依赖隔离**：宿主机不需要 `zip` 命令，全在 Alpine 里。
 
 ## Alpine 镜像选择

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, RotateCcw, Settings } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
 import * as api from "../api";
-import { applyTargetId, generateScript, type GeneratedScript } from "../api/scriptGen";
+import { applyAppVersion, applyTargetId, generateScript, type GeneratedScript } from "../api/scriptGen";
 import { LlmError } from "../api/llm";
 import type { AppConfig, LlmConfig } from "../types/config";
 import { LLM_PROVIDER_LABELS } from "../types/config";
@@ -94,7 +96,9 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
     const script = phase.script;
     setPhase({ kind: "writing" });
     try {
-      const aligned = applyTargetId(script.files, id);
+      const appVersion = await getVersion().catch(() => "");
+      let aligned = applyTargetId(script.files, id);
+      if (appVersion) aligned = applyAppVersion(aligned, appVersion, "overwrite");
       const dir = await api.writeScriptFiles(
         root,
         id,
@@ -127,7 +131,7 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
           <div className="field-desc">加载配置中…</div>
         ) : !llm ? (
           <div className="field-desc" style={{ color: "var(--warn)" }}>
-            还没有配置 LLM API。请先到 ⚙ 设置里启用 AI 模型。
+            还没有配置 LLM API。请先到 <Settings size={12} className="inline-icon" /> 设置里启用 AI 模型。
           </div>
         ) : !root ? (
           <div className="field-desc" style={{ color: "var(--warn)" }}>
@@ -187,7 +191,8 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
                 className="field-desc"
                 style={{ color: "var(--ok)", whiteSpace: "pre-wrap" }}
               >
-                ✓ 已创建脚本：<code>{phase.dir}</code>
+                <Check size={12} className="inline-icon" />
+                已创建脚本：<code>{phase.dir}</code>
               </div>
             )}
             {phase.kind === "error" && (
@@ -431,7 +436,8 @@ export function ScriptIdInput({
         />
         {originalSuggestion && trimmed !== originalSuggestion && (
           <button type="button" onClick={() => onChange(originalSuggestion)} title="恢复 AI 建议的 id">
-            ↺ {originalSuggestion}
+            <RotateCcw size={12} className="inline-icon" />
+            {originalSuggestion}
           </button>
         )}
       </div>
