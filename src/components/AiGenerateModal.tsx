@@ -6,9 +6,11 @@ import { applyAppVersion, applyTargetId, generateScript, type GeneratedScript } 
 import { LlmError } from "../api/llm";
 import type { AppConfig, LlmConfig } from "../types/config";
 import { LLM_PROVIDER_LABELS } from "../types/config";
+import type { ScriptInfo } from "../types/manifest";
 
 interface Props {
   root: string | null;
+  scripts: ScriptInfo[];
   onClose: () => void;
   onCreated: (scriptDir: string, scriptId: string) => void;
 }
@@ -21,7 +23,7 @@ type Phase =
   | { kind: "done"; dir: string; id: string }
   | { kind: "error"; message: string; partial?: string };
 
-export function AiGenerateModal({ root, onClose, onCreated }: Props) {
+export function AiGenerateModal({ root, scripts, onClose, onCreated }: Props) {
   const [llm, setLlm] = useState<LlmConfig | null>(null);
   const [llmReady, setLlmReady] = useState(false);
   const [description, setDescription] = useState("");
@@ -30,8 +32,19 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
   const [streamText, setStreamText] = useState("");
   const [thinkingText, setThinkingText] = useState("");
   const [editedId, setEditedId] = useState("");
+  const [referenceId, setReferenceId] = useState("");
   const phaseRef = useRef<Phase>(phase);
   phaseRef.current = phase;
+
+  // 只有声明了 `files` 字段的脚本能作为参考（要不然没法读取它的文件作为上下文）。
+  const referenceCandidates = useMemo(
+    () => scripts.filter((s) => (s.manifest.files?.length ?? 0) > 0),
+    [scripts],
+  );
+  const referenceScript = useMemo(
+    () => referenceCandidates.find((s) => s.id === referenceId) ?? null,
+    [referenceCandidates, referenceId],
+  );
 
   useEffect(() => {
     api.getConfig().then((c: AppConfig) => {
@@ -63,8 +76,17 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
     let buffered = "";
     let thinking = "";
     try {
+      let reference: { id: string; files: { path: string; content: string }[] } | undefined;
+      if (referenceScript) {
+        const files = await api.readScriptFiles(referenceScript.dir);
+        reference = {
+          id: referenceScript.id,
+          files: files.map((f) => ({ path: f.path, content: f.content })),
+        };
+      }
       const script = await generateScript(llm, description, {
         signal: ctrl.signal,
+        reference,
         onDelta: (chunk, kind) => {
           if (kind === "thinking") {
             thinking += chunk;
@@ -139,6 +161,25 @@ export function AiGenerateModal({ root, onClose, onCreated }: Props) {
           </div>
         ) : (
           <>
+            <div className="field">
+              <label className="field-label">参考脚本（可选）</label>
+              <select
+                value={referenceId}
+                onChange={(e) => setReferenceId(e.target.value)}
+                disabled={phase.kind === "generating" || phase.kind === "writing"}
+              >
+                <option value="">—— 不参考 ——</option>
+                {referenceCandidates.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.manifest.name} ({s.id})
+                  </option>
+                ))}
+              </select>
+              <div className="field-desc">
+                选一个现有脚本作为风格 / 结构参考，AI 会在生成时阅读它的全部文件作为上下文。仅声明了 <code>files</code> 字段的脚本可选。
+              </div>
+            </div>
+
             <div className="field">
               <label className="field-label">描述脚本要做什么</label>
               <textarea

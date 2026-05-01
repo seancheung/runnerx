@@ -73,7 +73,7 @@ export interface OutputSpec {
   id: string;
   label?: string;
   description?: string;
-  type: "file" | "directory" | "text";
+  type: "file" | "directory";
   required?: boolean;
   suggested?: string;
   accept?: string[];
@@ -101,6 +101,11 @@ export interface Manifest {
   windows?: PlatformBlock;
   inputs?: InputSpec[];
   outputs?: OutputSpec[];
+  /** Distribution manifest — all files this script ships, like npm's
+   *  `package.json#files`. `manifest.yaml` is implicit (always included).
+   *  No globs; list each file literally. Required for AI features:
+   *  scripts without it have the AI edit button disabled. */
+  files?: string[];
 }
 
 export interface InstallState {

@@ -23,10 +23,13 @@ export interface FormValues {
 interface Props {
   manifest: Manifest;
   disabled: boolean;
+  /** Extra reason to disable just the "运行" button (form fields stay editable).
+   *  Set to a string explaining why; rendered as the button's tooltip. */
+  runDisabledReason?: string;
   onSubmit: (values: FormValues) => void;
 }
 
-export function DynamicForm({ manifest, disabled, onSubmit }: Props) {
+export function DynamicForm({ manifest, disabled, runDisabledReason, onSubmit }: Props) {
   const defaults = useMemo(() => buildDefaults(manifest), [manifest]);
   const methods = useForm<FormValues>({ defaultValues: defaults, mode: "onSubmit" });
 
@@ -69,7 +72,13 @@ export function DynamicForm({ manifest, disabled, onSubmit }: Props) {
           </>
         )}
 
-        <button className="primary" type="button" onClick={handleRun} disabled={disabled}>
+        <button
+          className="primary"
+          type="button"
+          onClick={handleRun}
+          disabled={disabled || !!runDisabledReason}
+          title={runDisabledReason || undefined}
+        >
           运行
         </button>
       </form>

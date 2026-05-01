@@ -5,6 +5,7 @@ version: 0.1.0
 appVersion: 0.3.0
 category: 文件批处理
 tags: [archive, cross-platform]
+files: [run.sh, run.ps1, README.md]
 
 macos:
   entry:

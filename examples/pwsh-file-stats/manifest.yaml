@@ -5,6 +5,7 @@ version: 0.1.0
 appVersion: 0.3.0
 category: 文件批处理
 tags: [powershell, file]
+files: [run.ps1, README.md]
 
 # macOS 上走 pwsh (PowerShell 7+，需用户预先 brew install --cask powershell)
 # macos:

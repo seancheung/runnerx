@@ -5,6 +5,7 @@ version: 0.1.0
 appVersion: 0.3.0
 category: 文件批处理
 tags: [python, file]
+files: [install.sh, run.py, uninstall.sh]
 
 macos:
   entry:

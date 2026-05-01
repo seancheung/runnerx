@@ -39,10 +39,6 @@ export async function readReadme(path: string): Promise<string> {
   return await invoke<string>("read_readme", { path });
 }
 
-export async function markUninstalled(dir: string): Promise<void> {
-  await invoke("mark_uninstalled", { dir });
-}
-
 export async function runScript(
   scriptDir: string,
   inputs: Record<string, unknown>,

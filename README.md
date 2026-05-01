@@ -138,12 +138,33 @@ windows:
 ```yaml
 outputs:
   - id: output_file
-    type: file        # file | directory | text
+    type: file        # file | directory
     required: true    # 默认 true；为 false 时允许用户留空，脚本可走自己的默认路径
     accept: [".mp3"]
 ```
 
 每个 output 都会在表单里显示为路径选择器（文件 → 保存对话框；目录 → 选目录对话框）。选好的路径会和 inputs 一起传给脚本（前缀 `RUNNERX_`，和输入共用同一前缀）。`required` 默认 `true`，必填项的标签会带 `*`；设为 `false` 表示可选，用户没填时环境变量为空字符串，脚本需自行兜底。如果脚本完全自己决定输出位置（写死路径或基于 input 推算），就不要声明 output——直接通过 `@@runnerx result` 把最终路径反馈给 UI 即可。
+
+---
+
+## 分发清单（`files`）
+
+类似 npm `package.json#files`，在 manifest 顶层显式列出脚本分发的所有文件：
+
+```yaml
+files:
+  - run.sh
+  - lib/utils.sh
+  - README.md
+```
+
+- **路径**：相对脚本目录，禁止 `..` 和绝对路径
+- **不支持 glob**：逐个写文件名
+- **`manifest.yaml` 自动包含**：不需要写它（写了也不会报错）
+- **AI 修改的上下文**：`AI 修改` 按钮把这个清单里的文件喂给模型作为上下文。**没声明 `files` 的脚本，AI 修改按钮会被禁用**
+- **AI 创建的脚本会自动写好这个字段**；之后用户增删文件时记得手动同步，否则 AI 修改时看不到新文件
+
+仍然受 64 KB 单文件 / 256 KB 总量限制（防止超大文件爆 prompt）。
 
 ---
 

@@ -5,6 +5,7 @@ version: 1.0.0
 appVersion: 0.3.0
 category: 媒体
 tags: [image, conversion, imagemagick]
+files: [run.sh, README.md]
 macos:
   entry:
     command: ./run.sh

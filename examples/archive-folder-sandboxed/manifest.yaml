@@ -5,6 +5,7 @@ version: 0.1.0
 appVersion: 0.3.0
 category: 文件批处理
 tags: [archive, sandbox]
+files: [install.sh, run.sh, README.md]
 
 # Alpine 5MB 起步，install 时 apk add zip 即可。
 sandbox:

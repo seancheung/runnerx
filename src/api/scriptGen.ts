@@ -132,16 +132,32 @@ export async function generateScript(
     signal?: AbortSignal;
     onDelta?: (chunk: string, kind: ChatDeltaKind) => void;
     platform?: Platform;
+    /** Optional existing script to use as a structural / stylistic reference.
+     *  Its files are inlined into the user message as a `<reference-script>`
+     *  block; the AI is told to learn from it but produce a distinct new
+     *  script (different id, different files). */
+    reference?: { id: string; files: ExistingFile[] };
   } = {},
 ): Promise<GeneratedScript> {
   const platform = options.platform ?? detectPlatform();
   const platformLabel = PLATFORM_LABEL[platform];
+  const referenceBlock = options.reference
+    ? `下面是用户挑选的**参考脚本** \`${options.reference.id}\`，把它当作结构 / 风格 / 协议用法的范本，**不要照抄**——目标是产出一个和它解决的问题不同的新脚本。新脚本的 id、文件名、版本号、内容应当独立于它。\n\n` +
+      options.reference.files
+        .map(
+          (f) =>
+            `<reference-file path="${f.path}">\n${f.content.replace(/\r\n/g, "\n")}\n</reference-file>`,
+        )
+        .join("\n\n") +
+      "\n\n"
+    : "";
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
       content:
         `请帮我创建一个 runnerx 脚本，需求如下：\n\n${description.trim()}\n\n` +
+        referenceBlock +
         `当前用户平台：${platformLabel}。如果是单平台脚本，**只输出对应的那一个平台块**（${platform === "windows" ? "windows" : "macos"}）。\n` +
         `**默认单平台**：除非上面的需求里明确要求"跨平台"/"多平台"/"Windows 和 macOS 都能跑"，否则只生成一个平台块。\n` +
         `**默认不沙盒**：除非上面的需求里明确要求"沙盒"/"docker"/"容器隔离"/"sandbox"，否则不要写 \`sandbox\` 字段。\n\n` +

@@ -146,7 +146,6 @@ pub struct InputSpec {
 pub enum OutputType {
     File,
     Directory,
-    Text,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,6 +203,16 @@ pub struct Manifest {
     pub inputs: Vec<InputSpec>,
     #[serde(default)]
     pub outputs: Vec<OutputSpec>,
+
+    /// Distribution manifest — all files (relative paths) that make up this
+    /// script. Mirrors npm's `package.json#files`: list every file the
+    /// script ships, with `manifest.yaml` implicit (always included even if
+    /// not listed). No glob support — list each path literally.
+    ///
+    /// Required for AI features: the AI edit / create flows use this list
+    /// as their context window. Scripts without `files` declared have the
+    /// AI edit button disabled.
+    pub files: Option<Vec<String>>,
 }
 
 impl Manifest {

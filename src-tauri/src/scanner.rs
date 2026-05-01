@@ -5,9 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// JSON state file written after a successful install.
-const INSTALL_STATE_FILE: &str = ".runnerx-installed.json";
-/// Pre-sandbox empty marker; still recognized as "host installed" for backward compat.
-const LEGACY_MARKER: &str = ".runnerx-installed";
+const INSTALL_STATE_FILE: &str = ".runnerx-installed";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -218,50 +216,23 @@ pub fn install_state_path(dir: &Path) -> PathBuf {
     dir.join(INSTALL_STATE_FILE)
 }
 
-pub fn legacy_marker_path(dir: &Path) -> PathBuf {
-    dir.join(LEGACY_MARKER)
-}
-
 pub fn read_install_state(dir: &Path) -> Option<InstallState> {
-    let json_path = install_state_path(dir);
-    if json_path.is_file() {
-        if let Ok(content) = fs::read_to_string(&json_path) {
-            if let Ok(state) = serde_json::from_str::<InstallState>(&content) {
-                return Some(state);
-            }
-        }
-    }
-    if legacy_marker_path(dir).is_file() {
-        return Some(InstallState {
-            version: 1,
-            kind: InstallKind::Host,
-            image: None,
-            base_image: None,
-            installed_at: None,
-        });
-    }
-    None
+    let path = install_state_path(dir);
+    if !path.is_file() { return None; }
+    let content = fs::read_to_string(&path).ok()?;
+    serde_json::from_str::<InstallState>(&content).ok()
 }
 
 pub fn write_install_state(dir: &Path, state: &InstallState) -> Result<()> {
     let json = serde_json::to_string_pretty(state)?;
     fs::write(install_state_path(dir), json)?;
-    // Clean up the legacy empty marker if it lingers from a previous version.
-    let legacy = legacy_marker_path(dir);
-    if legacy.exists() {
-        let _ = fs::remove_file(&legacy);
-    }
     Ok(())
 }
 
 pub fn clear_install_state(dir: &Path) -> Result<()> {
-    let json_path = install_state_path(dir);
-    if json_path.exists() {
-        fs::remove_file(&json_path)?;
-    }
-    let legacy = legacy_marker_path(dir);
-    if legacy.exists() {
-        fs::remove_file(&legacy)?;
+    let path = install_state_path(dir);
+    if path.exists() {
+        fs::remove_file(&path)?;
     }
     Ok(())
 }

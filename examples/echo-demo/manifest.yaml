@@ -5,6 +5,7 @@ version: 0.1.0
 appVersion: 0.3.0
 category: 示例
 tags: [demo, protocol]
+files: [run.sh, README.md]
 
 macos:
   entry:

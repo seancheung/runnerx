@@ -25,7 +25,6 @@ pub fn run() {
             commands::read_script,
             commands::read_script_files,
             commands::read_readme,
-            commands::mark_uninstalled,
             commands::run_script,
             commands::run_install,
             commands::run_uninstall,

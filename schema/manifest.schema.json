@@ -31,7 +31,12 @@
     "macos": { "$ref": "#/definitions/platformBlock" },
     "windows": { "$ref": "#/definitions/platformBlock" },
     "inputs": { "type": "array", "items": { "$ref": "#/definitions/input" } },
-    "outputs": { "type": "array", "items": { "$ref": "#/definitions/output" } }
+    "outputs": { "type": "array", "items": { "$ref": "#/definitions/output" } },
+    "files": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Distribution manifest — every file this script ships (relative paths, no globs). manifest.yaml is implicit. Required to enable AI edit."
+    }
   },
   "definitions": {
     "command": {
@@ -196,7 +201,7 @@
         "id": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$" },
         "label": { "type": "string" },
         "description": { "type": "string" },
-        "type": { "type": "string", "enum": ["file", "directory", "text"] },
+        "type": { "type": "string", "enum": ["file", "directory"] },
         "required": { "type": "boolean", "default": true, "description": "Whether the user must pick a path before running. When false, the user can leave it empty and the script receives an empty value." },
         "suggested": { "type": "string", "description": "Template for default path. Use {{input_id.stem|name|ext|path}}." },
         "accept": { "type": "array", "items": { "type": "string" } }

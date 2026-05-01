@@ -16,12 +16,11 @@ interface Props {
   onStartInstall: () => void;
   onStartUninstall: (alsoRemoveBase: boolean) => void;
   onCancel: () => void;
-  onMarkUninstalled: () => void;
   onAiEdit: () => void;
 }
 
 export function ScriptDetail({
-  script, run, onStartRun, onStartInstall, onStartUninstall, onCancel, onMarkUninstalled, onAiEdit,
+  script, run, onStartRun, onStartInstall, onStartUninstall, onCancel, onAiEdit,
 }: Props) {
   const [tab, setTab] = useState<"run" | "readme">("run");
   const [readme, setReadme] = useState<string | null>(null);
@@ -49,6 +48,10 @@ export function ScriptDetail({
   const formDisabled = isRunning || !supports;
   const actionDisabled = isRunning || !supports;
   const unsupportedTitle = "该脚本未声明支持当前平台，无法运行/安装";
+  // 需要 install 但还没装的脚本，运行按钮要禁用（表单可以填，但点不了运行）。
+  const runDisabledReason = hasInstall && !script.installed
+    ? "脚本尚未安装，请先点击右上角的「安装」"
+    : undefined;
 
   // 卸载永远只删该脚本的 installed image，不删 base image。
   // base image 是系统级共享资源（多个脚本可能共用），UI 一键删风险高；
@@ -99,8 +102,12 @@ export function ScriptDetail({
         <div className="actions">
           <button
             onClick={onAiEdit}
-            disabled={isRunning}
-            title="让 AI 根据自然语言修改这个脚本"
+            disabled={isRunning || !(m.files && m.files.length > 0)}
+            title={
+              !(m.files && m.files.length > 0)
+                ? "manifest 没有声明 `files` 字段，无法启用 AI 修改"
+                : "让 AI 根据自然语言修改这个脚本"
+            }
             className="icon-button"
           >
             <WandSparkles size={14} />
@@ -111,7 +118,7 @@ export function ScriptDetail({
               disabled={actionDisabled}
               title={!supports ? unsupportedTitle : undefined}
             >
-              {script.installed ? "重新安装" : "安装"}
+              {script.installed ? "重装" : "安装"}
             </button>
           )}
           {hasUninstall && script.installed && (
@@ -129,15 +136,6 @@ export function ScriptDetail({
               卸载
             </button>
           )}
-          {hasInstall && script.installed && (
-            <button
-              onClick={onMarkUninstalled}
-              disabled={isRunning}
-              title="只删除 .runnerx-installed 标记，不运行任何脚本（用于强制重装）"
-            >
-              清除标记
-            </button>
-          )}
         </div>
       </header>
 
@@ -148,7 +146,12 @@ export function ScriptDetail({
             {readme && <div className={"tab" + (tab === "readme" ? " active" : "")} onClick={() => setTab("readme")}>README</div>}
           </div>
           {tab === "run" ? (
-            <DynamicForm manifest={m} disabled={formDisabled} onSubmit={onStartRun} />
+            <DynamicForm
+              manifest={m}
+              disabled={formDisabled}
+              runDisabledReason={runDisabledReason}
+              onSubmit={onStartRun}
+            />
           ) : (
             <div className="readme">
               {readme && <ReactMarkdown remarkPlugins={[remarkGfm]}>{readme}</ReactMarkdown>}

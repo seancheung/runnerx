@@ -5,6 +5,7 @@ version: 0.1.0
 appVersion: 0.3.0
 category: 媒体处理
 tags: [ffmpeg, audio]
+files: [run.sh]
 
 macos:
   entry:

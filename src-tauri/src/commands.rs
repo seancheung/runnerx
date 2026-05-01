@@ -47,85 +47,103 @@ pub struct ScriptFileEntry {
     pub executable: bool,
 }
 
-/// Read text-like files inside a script directory for AI editing context.
-/// Skips binary files (icons, archives), oversized files, and the install
-/// state marker. Paths are relative to `dir`, using forward slashes.
+/// Read the script's distribution files (manifest.yaml + the `files` list)
+/// for the AI edit flow. Errors out if the manifest doesn't declare `files`
+/// — the AI edit button is gated on that field, so reaching here without it
+/// is a misuse.
+///
+/// Per-file (64 KB) and total (256 KB) byte caps apply to keep prompt size
+/// bounded; oversized files are silently skipped.
 #[tauri::command]
 pub fn read_script_files(dir: String) -> Result<Vec<ScriptFileEntry>> {
     const MAX_TOTAL_BYTES: u64 = 256 * 1024;
     const MAX_FILE_BYTES: u64 = 64 * 1024;
-    const SKIP_EXT: &[&str] = &[
-        "png", "jpg", "jpeg", "gif", "webp", "ico", "icns", "bmp",
-        "zip", "tar", "gz", "tgz", "xz", "bz2", "7z",
-        "exe", "dll", "so", "dylib", "bin",
-        "pdf", "mp3", "mp4", "mov", "wav",
-    ];
     let root = PathBuf::from(&dir);
     if !root.is_dir() {
         return Err(RxError::Other(format!("脚本目录不存在：{}", root.display())));
     }
+    let whitelist = read_files_field(&root)
+        .ok_or_else(|| RxError::Other("manifest 没有声明 `files` 字段，无法启用 AI 修改".into()))?;
+    read_whitelisted(&root, &whitelist, MAX_FILE_BYTES, MAX_TOTAL_BYTES)
+}
+
+/// Parse the manifest at `root/manifest.{yaml,yml}` and return its `files`
+/// field. Returns `None` if the manifest is missing/unreadable/unparseable
+/// or the field is absent.
+fn read_files_field(root: &std::path::Path) -> Option<Vec<String>> {
+    for name in ["manifest.yaml", "manifest.yml"] {
+        let p = root.join(name);
+        if !p.is_file() { continue; }
+        let raw = std::fs::read_to_string(&p).ok()?;
+        let manifest: Manifest = serde_yaml::from_str(&raw).ok()?;
+        return manifest.files;
+    }
+    None
+}
+
+/// Read each whitelisted relative path under `root`. Always prepends
+/// `manifest.yaml` (or `.yml`) so the AI flow's required declaration is
+/// guaranteed present even if the author didn't list it. Skips paths that
+/// don't exist, escape the root, or blow past size caps.
+fn read_whitelisted(
+    root: &std::path::Path,
+    whitelist: &[String],
+    max_file: u64,
+    max_total: u64,
+) -> Result<Vec<ScriptFileEntry>> {
+    let mut paths: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    let push_unique = |paths: &mut Vec<String>, seen: &mut std::collections::HashSet<String>, p: String| {
+        if seen.insert(p.clone()) {
+            paths.push(p);
+        }
+    };
+    for name in ["manifest.yaml", "manifest.yml"] {
+        if root.join(name).is_file() {
+            push_unique(&mut paths, &mut seen, name.to_string());
+            break;
+        }
+    }
+    for raw in whitelist {
+        let trimmed = raw.trim().trim_start_matches("./");
+        if trimmed.is_empty() { continue; }
+        // Reject absolute paths and any traversal. Forward slashes only.
+        let pb = PathBuf::from(trimmed);
+        if pb.is_absolute() { continue; }
+        let mut safe = true;
+        let mut norm = String::new();
+        for comp in pb.components() {
+            match comp {
+                Component::Normal(s) => {
+                    if !norm.is_empty() { norm.push('/'); }
+                    norm.push_str(&s.to_string_lossy());
+                }
+                _ => { safe = false; break; }
+            }
+        }
+        if !safe || norm.is_empty() { continue; }
+        push_unique(&mut paths, &mut seen, norm);
+    }
+
     let mut entries: Vec<ScriptFileEntry> = Vec::new();
     let mut total: u64 = 0;
-    let mut stack: Vec<PathBuf> = vec![root.clone()];
-    while let Some(current) = stack.pop() {
-        let read = match std::fs::read_dir(&current) {
-            Ok(r) => r,
+    for rel in &paths {
+        let abs = root.join(rel);
+        let metadata = match abs.metadata() {
+            Ok(m) if m.is_file() => m,
+            _ => continue,
+        };
+        let size = metadata.len();
+        if size > max_file { continue; }
+        if total + size > max_total { break; }
+        let content = match std::fs::read_to_string(&abs) {
+            Ok(s) => s,
             Err(_) => continue,
         };
-        for child in read.flatten() {
-            let abs = child.path();
-            let name = child.file_name();
-            let name_str = name.to_string_lossy();
-            // Skip hidden entries (e.g. .git, .DS_Store, .runnerx-installed).
-            if name_str.starts_with('.') {
-                continue;
-            }
-            let ft = match child.file_type() {
-                Ok(t) => t,
-                Err(_) => continue,
-            };
-            if ft.is_dir() {
-                stack.push(abs);
-                continue;
-            }
-            if !ft.is_file() {
-                continue;
-            }
-            let ext = abs.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
-            if !ext.is_empty() && SKIP_EXT.iter().any(|x| *x == ext.as_str()) {
-                continue;
-            }
-            let metadata = match abs.metadata() {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-            let size = metadata.len();
-            if size > MAX_FILE_BYTES {
-                continue;
-            }
-            if total + size > MAX_TOTAL_BYTES {
-                stack.clear();
-                break;
-            }
-            let content = match std::fs::read_to_string(&abs) {
-                Ok(s) => s,
-                Err(_) => continue, // not utf-8 / binary
-            };
-            let rel = match abs.strip_prefix(&root) {
-                Ok(r) => r,
-                Err(_) => continue,
-            };
-            let rel_str = rel.components().filter_map(|c| match c {
-                Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
-                _ => None,
-            }).collect::<Vec<_>>().join("/");
-            if rel_str.is_empty() {
-                continue;
-            }
-            let executable = is_executable(&metadata, &rel_str);
-            total += size;
-            entries.push(ScriptFileEntry { path: rel_str, content, executable });
-        }
+        total += size;
+        let executable = is_executable(&metadata, rel);
+        entries.push(ScriptFileEntry { path: rel.clone(), content, executable });
     }
     entries.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(entries)
@@ -147,11 +165,6 @@ fn is_executable(_meta: &std::fs::Metadata, rel: &str) -> bool {
 #[tauri::command]
 pub fn read_readme(path: String) -> Result<String> {
     Ok(std::fs::read_to_string(&path)?)
-}
-
-#[tauri::command]
-pub fn mark_uninstalled(dir: String) -> Result<()> {
-    scanner::clear_install_state(&PathBuf::from(dir))
 }
 
 #[tauri::command]

@@ -24,20 +24,21 @@ icon: icon.png              # 相对路径，PNG/SVG/JPG/WebP
 readme: README.md           # 默认 README.md
 
 inputs:  [...]              # 见 §3
-outputs: [...]              # 见 §2.5
-sandbox: { image: python:3.11-slim }   # 可选；声明后整个脚本跑在 docker 里，跨平台共享
+outputs: [...]              # 见 §4
+sandbox: { image: python:3.11-slim }   # 可选；见 §5
+files: [run.sh, README.md]             # **必填**；见 §6
 
-# ---- 平台块（至少声明一个：macos 或 windows） ----
+# ---- 平台块（至少声明一个：macos 或 windows） ----  见 §7
 macos:
-  entry:                    # 必填
+  entry:                    # 必填，见 §7.1
     command: ./run.sh
     args: ["--foo"]         # 可选，固定附加参数
-    shell: false            # 是否走 shell 解释，见 §6
+    shell: false            # 是否走 shell 解释
     cwd: "."                # 可选，工作目录，相对脚本目录；默认就是脚本目录
-    argsMode: env           # env (默认) | argv | stdin-json，见 §4
-  install:   { command: ./install.sh }    # 可选
-  uninstall: { command: ./uninstall.sh }  # 可选
-  preRun:    { command: ./check.sh }      # 可选；每次运行前跑，stdout 不显示给用户
+    argsMode: env           # env (默认) | argv | stdin-json，见 §7.2
+  install:   { command: ./install.sh }    # 可选，见 §7.3
+  uninstall: { command: ./uninstall.sh }  # 可选，见 §7.3
+  preRun:    { command: ./check.sh }      # 可选，见 §7.3
 
 windows:
   entry:
@@ -51,21 +52,7 @@ windows:
 
 平台解析在 runtime：当前平台是 macOS 就用 `macos:` 块，是 Windows 就用 `windows:` 块；如果当前平台没有对应块，应用会把脚本标为"不支持当前平台"，禁用运行/安装按钮。
 
-## 2.5 outputs
-
-```yaml
-outputs:
-  - id: out_file
-    type: file              # file | directory | text
-    label: 输出文件
-    required: true          # 默认 true（必填）；为 false 时用户可留空，脚本会收到空字符串
-    suggested: result.mp3   # 默认文件名
-    accept: [".mp3", ".wav"]
-```
-
-声明 output 即代表"运行前要让用户选保存位置"。表单里会自动显示路径选择器；type=file 弹保存对话框，type=directory 弹目录选择对话框。`required: false` 时用户可留空，脚本要兜底（例如写到固定路径）。如果脚本完全自己决定输出位置（无需用户参与），**不要声明 output**——通过 `@@runnerx result` 把最终路径告诉应用即可。
-
-# 3. 输入参数（共 10 种 type）
+# 3. inputs
 
 通用字段：`id`（必填，snake_case 或 camelCase）、`type`（必填）、`label`、`description`、`required`、`default`、`placeholder`、`when`（条件显示，例 `{ format: [mp3, aac] }`）。
 
@@ -90,9 +77,86 @@ options:
   - { value: b, label: 选项 B }
 ```
 
-# 4. 参数传递（entry.argsMode）
+# 4. outputs
 
-## 4.1 `env`（默认，最常用）
+```yaml
+outputs:
+  - id: out_file
+    type: file              # file | directory
+    label: 输出文件
+    required: true          # 默认 true（必填）；为 false 时用户可留空，脚本会收到空字符串
+    suggested: result.mp3   # 默认文件名
+    accept: [".mp3", ".wav"]
+```
+
+通用字段：`id`（必填）、`type`（必填）、`label`、`description`、`required`（默认 true）、`suggested`（默认文件名 / 目录名模板）。
+
+| type | 专属可选字段 | UI / 行为 |
+|------|------|------|
+| file | `accept`（扩展名数组） | 弹保存对话框；任何单文件产物（视频、音频、图片、压缩包、log、报告、CSV 等）都用这个 |
+| directory | — | 弹目录选择对话框；用于输出是一组文件、需要装到一个目录里的场景 |
+
+声明 output 即代表"运行前要让用户选保存位置"。`required: false` 时用户可留空，脚本要兜底（例如写到固定路径）。如果输出位置固定无法修改，脚本完全自己决定（无需用户参与），**不要声明 output**——通过 `@@runnerx result` 把最终路径告诉应用即可。
+
+**input 还是 output 的判断**：脚本要**写入**的 file / directory 放 outputs；只**读取**的放 inputs。例外是输入和输出是**同一个**文件 / 目录（如批量重命名、原地修改），这种情况用 input 即可，不必额外声明 output。
+
+# 5. sandbox
+
+```yaml
+sandbox:
+  image: python:3.11-slim    # 必填，base Docker image
+```
+
+声明 `sandbox` 后整个脚本跑在 Docker 容器里，跨平台共享同一镜像（macos / windows 平台块仍要至少声明一个，里面的 entry 在容器内执行）。input file/files/directory 自动 ro 挂载到 `/runnerx/in/<id>`，output 走 rw 临时挂载点回搬到 host。
+
+**默认不写**：除非用户明确要求"沙盒"/"docker"/"容器隔离"/"sandbox"，否则不要添加这个字段。
+
+# 6. files
+
+**必填**。脚本的分发清单（类似 npm `package.json#files`）：
+
+```yaml
+files: [run.sh, run.ps1, README.md, install.sh]
+```
+
+- 列出脚本目录下所有需要随脚本分发的文本 / 辅助文件 —— `run.*` / `install.*` / `uninstall.*` / `README.md` / 任何被入口 source 的脚本都要写
+- **不要列 `manifest.yaml` 自身**（自动包含）
+- **不支持 glob**，逐个写文件名
+- 新增 / 删除 / 改名脚本文件时必须同步更新
+- 这个字段还作为 AI 修改的上下文范围 —— 没声明的话 AI 修改按钮会被禁用
+
+# 7. macos / windows 平台块
+
+至少声明 `macos` 和 `windows` 中的一个。当前平台没有对应块时，应用会把脚本标为"不支持当前平台"，禁用运行/安装按钮。**默认单平台**：除非用户需求里明确要"跨平台"/"多平台"/"Windows 和 macOS 都能跑"，只生成当前平台的一个块（跨平台时两个块互相独立，各自要有完整的 entry，必要时还有 install / uninstall / preRun）。
+
+平台块内字段：
+- `entry`（必填）— 入口命令；见 §7.1
+- `argsMode` 其实是 entry 的子字段；见 §7.2
+- `install` / `uninstall` / `preRun`（可选）— 生命周期钩子；见 §7.3
+
+## 7.1 entry
+
+```yaml
+entry:
+  command: ./run.sh        # 必填
+  args: ["--foo"]          # 可选，固定附加参数
+  shell: false             # 是否走 shell 解释
+  cwd: "."                 # 可选，工作目录，相对脚本目录；默认就是脚本目录
+  argsMode: env            # env (默认) | argv | stdin-json，见 §7.2
+```
+
+| 平台 | 推荐 entry |
+|------|------|
+| macOS | `command: ./run.sh`，`shell: false`；脚本第一行 `#!/usr/bin/env bash` + `set -euo pipefail` |
+| Windows | `command: powershell.exe`、`args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "run.ps1"]`、`shell: false` |
+
+⚠️ Windows 上 **不要**靠 `shell: true` 把 `.ps1` 直接当 command —— `shell: true` 在 Windows 走 `cmd /C`，cmd 不会执行 `.ps1`（PATHEXT 默认不含 `.PS1`，且 ExecutionPolicy 也会拦）。必须用 `powershell.exe -File`。如果脚本用了 PowerShell 7+ 特性（三元运算符、`ForEach-Object -Parallel` 等），把 `command` 换成 `pwsh`，并在 README 提示用户安装。
+
+## 7.2 entry.argsMode
+
+`argsMode` 决定 inputs / outputs 怎么传给脚本进程。三种模式：
+
+### `env`（默认，最常用）
 每个输入和输出都变成环境变量 `RUNNERX_<ID大写>`（输入和输出共用同一前缀）。
 - boolean → `"1"` / `"0"`
 - files → 多文件路径用分隔符 join：Unix 用 `:`，Windows 用 `;`
@@ -101,20 +165,35 @@ options:
 - 其它（string/number/file/directory/date/password/enum 单选）→ 字符串值
 - bash：`"${RUNNERX_FOO:-default}"`；PowerShell：`$env:RUNNERX_FOO`
 
-## 4.2 `argv`
+### `argv`
 每个输入追加为命令行参数 `--<id-kebab-case>=<value>`：
 - boolean true → 只追加 `--<id-kebab>`（无 `=`）；false → 不追加
 - files / 多选 enum → 重复多个 `--<id-kebab>=<v>`
 - 输出参数前缀是 `--out-<id-kebab>=<value>`
 
-## 4.3 `stdin-json`
+### `stdin-json`
 脚本进程的 stdin 写入：
 ```json
 {"inputs": {<id>: <value>, ...}, "outputs": {<id>: <path>, ...}}
 ```
 脚本里读全部 stdin 解析。值原样保留 JSON 类型（boolean 还是 boolean，files 还是数组）。
 
-# 5. 输出协议（@@runnerx）
+## 7.3 install / uninstall / preRun
+
+可选生命周期钩子。每个都是一个 command 对象（结构同 `entry`，但没有 `argsMode`）。
+
+```yaml
+install:   { command: ./install.sh }    # 一次性安装；成功后写 .runnerx-installed 标记
+uninstall: { command: ./uninstall.sh }  # 卸载；成功后清除 .runnerx-installed 标记
+preRun:    { command: ./check.sh }      # 每次运行前同步执行；失败则阻断
+```
+
+- `install` / `uninstall` 在前端有进度视图（和普通运行共用），输出走同一套 `@@runnerx` 协议
+- `preRun` 静默执行，stderr 在失败时反馈给用户
+- 跨平台脚本两个平台块的 install / uninstall 互相独立，互不共享
+- **声明了 `install` 就必须配套 `uninstall`**：`install` 干了什么（创建 venv、下载二进制、写配置文件、注入 PATH 等），`uninstall` 就要把它撤回去。同时把对应的 `uninstall.sh` / `uninstall.ps1` 写好并加进 `files`。**仅当无法以脚本方式自动撤销**（例如 install 调用了 `brew install foo` 但 brew 是用户机器全局共享的，贸然 `brew uninstall` 会影响别的工具）才省略 `uninstall`，并在 `install.sh` 顶部用注释说清楚为什么不能自动卸载、用户应当如何手动清理。
+
+# 8. @@runnerx 输出协议
 
 脚本任意一行 stdout/stderr 以 `@@runnerx ` 开头会被解析为协议消息；其它行进入控制台。**payload 必须是严格合法的 JSON**，否则解析失败、整行原样显示。
 
@@ -134,31 +213,14 @@ JSON 安全要点：
 - 字符串里出现的 `"`、`\`、换行需要转义。
 - `progress.value` 必须 0–1 浮点数；越界先 clamp。
 
-# 6. 平台与最佳实践
-
-## 6.1 入口写法
-
-| 平台 | 推荐 entry |
-|------|------|
-| macOS | `command: ./run.sh`，`shell: false`；脚本第一行 `#!/usr/bin/env bash` + `set -euo pipefail` |
-| Windows | `command: powershell.exe`、`args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "run.ps1"]`、`shell: false` |
-
-⚠️ Windows 上 **不要**靠 `shell: true` 把 `.ps1` 直接当 command —— `shell: true` 在 Windows 走 `cmd /C`，cmd 不会执行 `.ps1`（PATHEXT 默认不含 `.PS1`，且 ExecutionPolicy 也会拦）。必须用 `powershell.exe -File`。如果脚本用了 PowerShell 7+ 特性（三元运算符、`ForEach-Object -Parallel` 等），把 `command` 换成 `pwsh`，并在 README 提示用户安装。
-
-## 6.2 默认收敛
-
-- **默认单平台**：除非用户需求里明确说要"跨平台"/"多平台"/"Windows 和 macOS 都能跑"等，就只生成当前平台的一个块（macos 或 windows）。
-- **默认不沙盒**：除非用户明确要求"沙盒"/"docker"/"容器隔离"/"sandbox"，否则不要写 `sandbox` 字段。
-- **跨平台脚本**：两个平台块互相独立，各自要有完整的 entry（必要时还有 install/uninstall）。当前平台没有声明对应块时，应用会把脚本标为"不支持当前平台"，无法运行/安装。
-
-## 6.3 其它
+# 9. 通用最佳实践
 
 - macOS 自带 bash 是 **3.2**，不要用 4.x 才有的 `mapfile`、`declare -A`、`${var^^}` 等。
 - 进度推进：每个有意义的步骤打印一行 `@@runnerx progress {"value":<0~1>,"message":"..."}`。
 - `description` 写一句对用户有用的说明；`category` 用中文常见分类便于侧栏分组。
 - 如脚本依赖第三方 CLI（ffmpeg、imagemagick、yt-dlp 等），README 写清安装方式，或在平台块的 `install` 里自动装。
 
-# 7. 输出格式（必须严格遵守）
+# 10. 输出格式（必须严格遵守）
 
 只有 `<script>` 块内的内容会被写入磁盘。可在 `<script>` 之前用 `<plan>` 简短说明设计思路。
 

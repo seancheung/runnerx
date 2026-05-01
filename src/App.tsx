@@ -190,12 +190,6 @@ function App() {
     if (id) await api.cancelRun(id);
   }, []);
 
-  const handleMarkUninstalled = useCallback(async () => {
-    if (!selected) return;
-    await api.markUninstalled(selected.dir);
-    refresh();
-  }, [selected, refresh]);
-
   const saveSettings = useCallback(async (newRoot: string, newConfig: import("./types/config").AppConfig) => {
     await setScriptsRoot(newRoot);
     await api.setConfig(newConfig);
@@ -242,7 +236,6 @@ function App() {
             onStartInstall={startInstall}
             onStartUninstall={startUninstall}
             onCancel={cancel}
-            onMarkUninstalled={handleMarkUninstalled}
             onAiEdit={() => setShowAiEdit(true)}
           />
         ) : (
@@ -264,6 +257,7 @@ function App() {
       {showAiGenerate && (
         <AiGenerateModal
           root={root}
+          scripts={scripts}
           onClose={() => setShowAiGenerate(false)}
           onCreated={(_dir, id) => {
             setPendingSelectId(id);
