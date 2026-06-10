@@ -24,10 +24,9 @@ pub fn list_scripts(root: String) -> ScanResult {
 
 #[tauri::command]
 pub fn default_scripts_root() -> Result<String> {
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
+    let runnerx_home = crate::config::home_dir()
         .ok_or_else(|| RxError::Other("could not resolve home directory".into()))?;
-    let path = PathBuf::from(home).join(".runnerx").join("scripts");
+    let path = runnerx_home.join("scripts");
     if !path.exists() {
         std::fs::create_dir_all(&path)?;
     }

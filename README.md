@@ -9,6 +9,7 @@
 ## 目录
 
 - [启动开发模式](#启动开发模式)
+- [数据目录与配置](#数据目录与配置)
 - [脚本目录约定](#脚本目录约定)
 - [manifest.yaml 速查](#manifestyaml-速查)
 - [脚本 ↔ 应用通信协议](#脚本--应用通信协议)
@@ -54,9 +55,37 @@ npm run tauri build
 
 ---
 
+## 数据目录与配置
+
+应用的数据目录由环境变量 `RUNNERX_HOME` 决定，默认为 `~/.runnerx`。目录结构：
+
+```
+$RUNNERX_HOME/          # 默认 ~/.runnerx
+  config.yaml           # 所有配置（脚本目录、主题、沙盒网络、AI 模型等）
+  scripts/              # 默认脚本根目录
+```
+
+`config.yaml` 可手动编辑，完整示例：
+
+```yaml
+scriptsRoot: /path/to/your/scripts   # 不填则用 $RUNNERX_HOME/scripts
+theme: dark                          # dark | light | 不填跟随系统
+sandbox:
+  network: bridge                    # bridge | none | host
+llm:
+  provider: openai
+  apiKey: sk-xxxx
+  baseUrl: https://api.openai.com
+  model: gpt-4o-mini
+```
+
+如需将数据目录迁移到其他位置，设置环境变量 `RUNNERX_HOME` 即可。
+
+---
+
 ## 脚本目录约定
 
-默认根目录是 `~/.runnerx/scripts`（首次启动会自动创建）；可以在 ⚙ 设置里改成任意路径。根目录下的每个**直接子目录**如果包含 `manifest.yaml`（或 `.yml`）就被识别为一个脚本。
+默认根目录是 `$RUNNERX_HOME/scripts`（首次启动会自动创建）；可以在 ⚙ 设置里改成任意路径。根目录下的每个**直接子目录**如果包含 `manifest.yaml`（或 `.yml`）就被识别为一个脚本。
 
 ```
 <scripts_root>/
@@ -270,7 +299,7 @@ sandbox:
 ### 关键约束
 
 - **mount 全部 ro**，没有 `writable: true` 选项。要让脚本"产出"文件，用 `outputs` 声明（output 会挂 rw 临时目录中转）。
-- **网络**：install 阶段恒为 bridge（要拉镜像 / pip / apt）；run 阶段从全局配置读，默认 `bridge`。设置面板可改成 `none`（完全隔离）或 `host`（共享宿主机网络）。配置写到 `~/.runnerx/config.yaml`，可手动编辑。
+- **网络**：install 阶段恒为 bridge（要拉镜像 / pip / apt）；run 阶段从全局配置读，默认 `bridge`。设置面板可改成 `none`（完全隔离）或 `host`（共享宿主机网络）。配置写到 `$RUNNERX_HOME/config.yaml`，可手动编辑。
 - **路径环境变量自动翻译**：脚本看到的是容器路径（`/runnerx/in/foo`），不是 host 路径。这是隔离的目的。
 - **改源代码要 reinstall**：image 是状态。脚本目录改了不会自动同步进容器，必须再点一次安装来 commit 新 image。
 
@@ -294,7 +323,7 @@ sandbox:
 | 字段 | 说明 |
 |---|---|
 | 服务商 | OpenAI / Anthropic / Google Generative AI / DeepSeek |
-| API Key | 本地保存到 `~/.runnerx/config.yaml`，调用时由本应用直连厂商 API，不经任何中转 |
+| API Key | 本地保存到 `$RUNNERX_HOME/config.yaml`，调用时由本应用直连厂商 API，不经任何中转 |
 | Base URL | 选默认服务商时已自动填好；想接 OpenRouter / Together / Groq / 本地 Ollama 等 OpenAI 兼容服务，选 OpenAI 后改 Base URL 即可 |
 | 模型 | 如 `gpt-4o-mini`、`claude-sonnet-4-5`、`gemini-2.5-flash`、`deepseek-chat` |
 

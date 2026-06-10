@@ -6,6 +6,10 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scripts_root: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
     pub sandbox: SandboxConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm: Option<LlmConfig>,
@@ -72,13 +76,19 @@ impl SandboxNetwork {
     }
 }
 
-fn config_dir() -> Option<PathBuf> {
+pub fn home_dir() -> Option<PathBuf> {
+    if let Some(val) = std::env::var_os("RUNNERX_HOME") {
+        let p = PathBuf::from(val);
+        if !p.as_os_str().is_empty() {
+            return Some(p);
+        }
+    }
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     Some(PathBuf::from(home).join(".runnerx"))
 }
 
 pub fn config_path() -> Option<PathBuf> {
-    config_dir().map(|d| d.join("config.yaml"))
+    home_dir().map(|d| d.join("config.yaml"))
 }
 
 /// Read the config; missing file or parse errors fall back to defaults.
@@ -90,7 +100,7 @@ pub fn load() -> AppConfig {
 }
 
 pub fn save(cfg: &AppConfig) -> std::io::Result<()> {
-    let Some(d) = config_dir() else {
+    let Some(d) = home_dir() else {
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "no home dir"));
     };
     std::fs::create_dir_all(&d)?;

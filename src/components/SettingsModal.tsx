@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import * as api from "../api";
-import type { ThemePreference } from "../store";
 import {
   DEFAULT_CONFIG,
   LLM_PROVIDER_DEFAULTS,
@@ -11,6 +10,7 @@ import {
   type LlmConfig,
   type LlmProvider,
   type SandboxNetwork,
+  type ThemePreference,
 } from "../types/config";
 
 interface Props {
@@ -237,7 +237,7 @@ export function SettingsModal({ initialRoot, theme, onThemeChange, onClose, onSa
                 spellCheck={false}
               />
               <div className="field-desc">
-                密钥保存在 <code>~/.runnerx/config.yaml</code>，不会上传到任何地方（直接由本应用调用 API）。
+                密钥保存在本地配置文件中，不会上传到任何地方（直接由本应用调用 API）。
               </div>
             </div>
 

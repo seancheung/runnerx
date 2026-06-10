@@ -19,12 +19,18 @@ export interface LlmConfig {
   thinking?: boolean;
 }
 
+export type ThemePreference = "system" | "dark" | "light";
+
 export interface AppConfig {
+  scriptsRoot?: string | null;
+  theme?: ThemePreference | null;
   sandbox: SandboxConfig;
   llm?: LlmConfig | null;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
+  scriptsRoot: null,
+  theme: null,
   sandbox: { network: "bridge" },
   llm: null,
 };

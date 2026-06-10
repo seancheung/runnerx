@@ -16,7 +16,6 @@
     "fs:allow-read-text-file",
     "fs:allow-read-dir",
     "fs:allow-exists",
-    "store:default",
     "window-state:default",
     "core:event:default",
     "core:event:allow-listen",

@@ -1,47 +1,35 @@
-import { Store } from "@tauri-apps/plugin-store";
+import * as api from "./api";
+import type { ThemePreference } from "./types/config";
 
-let storePromise: Promise<Store> | null = null;
-
-function getStore(): Promise<Store> {
-  if (!storePromise) {
-    storePromise = Store.load("settings.json");
-  }
-  return storePromise;
-}
+export type { ThemePreference };
 
 export async function getScriptsRoot(): Promise<string | null> {
-  const store = await getStore();
-  return ((await store.get<string>("scriptsRoot")) ?? null);
+  const cfg = await api.getConfig();
+  return cfg.scriptsRoot ?? null;
 }
 
 export async function setScriptsRoot(path: string): Promise<void> {
-  const store = await getStore();
-  await store.set("scriptsRoot", path);
-  await store.save();
+  const cfg = await api.getConfig();
+  cfg.scriptsRoot = path;
+  await api.setConfig(cfg);
 }
 
 export async function clearScriptsRoot(): Promise<void> {
-  const store = await getStore();
-  await store.delete("scriptsRoot");
-  await store.save();
+  const cfg = await api.getConfig();
+  cfg.scriptsRoot = null;
+  await api.setConfig(cfg);
 }
 
-export type ThemePreference = "system" | "dark" | "light";
-
 export async function getTheme(): Promise<ThemePreference> {
-  const store = await getStore();
-  const v = await store.get<string>("theme");
+  const cfg = await api.getConfig();
+  const v = cfg.theme;
   return v === "dark" || v === "light" ? v : "system";
 }
 
 export async function setTheme(theme: ThemePreference): Promise<void> {
-  const store = await getStore();
-  if (theme === "system") {
-    await store.delete("theme");
-  } else {
-    await store.set("theme", theme);
-  }
-  await store.save();
+  const cfg = await api.getConfig();
+  cfg.theme = theme === "system" ? null : theme;
+  await api.setConfig(cfg);
 }
 
 export function applyTheme(theme: ThemePreference): void {
