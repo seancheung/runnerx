@@ -14,6 +14,7 @@
 - [脚本 ↔ 应用通信协议](#脚本--应用通信协议)
 - [生命周期](#生命周期)
 - [参数传递模式](#参数传递模式)
+- [环境变量文件（.env）](#环境变量文件env)
 - [沙盒模式 (Docker)](#沙盒模式-docker)
 - [AI 创建脚本](#ai-创建脚本)
 - [示例脚本](#示例脚本)
@@ -70,6 +71,7 @@ npm run tauri build
     install.sh
     run.py
     requirements.txt
+    .env               # 可选，自动注入环境变量
     .venv/             # install 之后会出现
 ```
 
@@ -217,6 +219,33 @@ macos:
 - `env`（默认）：每个输入和输出字段都以 `RUNNERX_<ID>` 形式存入环境变量（输入和输出共用同一前缀，所以 inputs / outputs 的 id 不能重名）。布尔值传 `1` / `0`，多文件用平台路径分隔符（`:` / `;`），多选 enum 用 `,`。
 - `argv`：以 `--<id-kebab-case>=<value>` 形式追加到命令行；boolean 仅在 true 时传 `--<id>`。
 - `stdin-json`：把 `{"inputs": {...}, "outputs": {...}}` 一次性写到子进程 stdin 然后关闭。
+
+---
+
+## 环境变量文件（.env）
+
+如果脚本目录下（与 `manifest.yaml` 同级）存在 `.env` 文件，应用会在**所有执行操作**（run、install、uninstall、preRun）前自动读取并注入其中的环境变量。
+
+```
+# .env 示例
+API_KEY=sk-xxxx
+BASE_URL="https://api.example.com"
+export DEBUG=1
+```
+
+支持的语法：
+
+- `KEY=VALUE`
+- `KEY="quoted value"` / `KEY='quoted value'`（去除外层引号）
+- `export KEY=VALUE`（`export` 前缀会被忽略）
+- `#` 开头的行视为注释
+- 空行自动跳过
+
+`.env` 中的变量先于 `RUNNERX_*` 变量注入，因此用户在表单里填写的输入值（`RUNNERX_<ID>`）会覆盖 `.env` 中的同名变量。
+
+沙盒模式同样生效：`.env` 中的变量会作为 `-e` 参数传给 `docker run` / `docker exec`。
+
+典型用途：存放 API Key、服务地址等脚本需要但不适合让用户每次填写的配置。
 
 ---
 

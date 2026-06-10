@@ -69,6 +69,14 @@ fn shell_quote(s: &str) -> String {
     format!("'{escaped}'")
 }
 
+fn dotenv_docker_flags(script_dir: &Path) -> String {
+    crate::runner::load_dotenv(script_dir)
+        .into_iter()
+        .map(|(k, v)| format!("-e {}", shell_quote(&format!("{k}={v}"))))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn derive_script_id(manifest: &Manifest, script_dir: &Path) -> Result<String> {
     Ok(manifest
         .id
@@ -99,6 +107,7 @@ pub async fn spawn_sandbox_install(
     let cname = container_name(&run_id);
 
     // User's install lifecycle (if any) runs inside the container at WORK_DIR.
+    let dotenv_flags = dotenv_docker_flags(&script_dir);
     let install_cmd = manifest.current_block().and_then(|b| b.install.clone());
     let install_step = match install_cmd {
         Some(c) => {
@@ -109,8 +118,9 @@ pub async fn spawn_sandbox_install(
                 .join(" ");
             format!(
                 "echo '@@runnerx progress {{\"value\":0.55,\"message\":\"running install\"}}'\n\
-                 docker exec -w {work} {cname} sh -c {q}\n",
+                 docker exec -w {work} {dotenv_flags} {cname} sh -c {q}\n",
                 work = WORK_DIR,
+                dotenv_flags = dotenv_flags,
                 cname = cname,
                 q = shell_quote(&cmd_line),
             )
@@ -199,6 +209,7 @@ pub async fn spawn_sandbox_uninstall(
 
     // Run user's uninstall lifecycle (if any) inside a one-shot container based
     // on the installed image, so they can clean up state living in the image fs.
+    let dotenv_flags = dotenv_docker_flags(&script_dir);
     let uninstall_cmd = manifest.current_block().and_then(|b| b.uninstall.clone());
     let user_uninstall_step = match uninstall_cmd {
         Some(c) => {
@@ -209,9 +220,10 @@ pub async fn spawn_sandbox_uninstall(
                 .join(" ");
             format!(
                 "echo '@@runnerx progress {{\"value\":0.20,\"message\":\"running uninstall script\"}}'\n\
-                 docker run --rm --name {cname} -w {work} --network=none {installed_q} sh -c {q}\n",
+                 docker run --rm --name {cname} -w {work} --network=none {dotenv_flags} {installed_q} sh -c {q}\n",
                 cname = cname,
                 work = WORK_DIR,
+                dotenv_flags = dotenv_flags,
                 installed_q = shell_quote(&installed_ref),
                 q = shell_quote(&cmd_line),
             )
@@ -417,6 +429,9 @@ pub async fn spawn_sandbox_run(
     }
     for (host, cont) in &rw_mounts {
         command.arg("-v").arg(format!("{host}:{cont}:rw"));
+    }
+    for (k, v) in crate::runner::load_dotenv(&script_dir) {
+        command.arg("-e").arg(format!("{k}={v}"));
     }
     for (k, v) in &env_pairs {
         command.arg("-e").arg(format!("{k}={v}"));

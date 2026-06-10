@@ -149,6 +149,7 @@ pub async fn spawn_run(
     };
 
     let mut command = build_command(&entry, &script_dir, &inputs, &outputs, &manifest.inputs)?;
+    apply_dotenv(&mut command, &script_dir);
     spawn_event_stream(app, state, &mut command, &cwd, stdin_payload, RunMode::Script, None, None, None).await
 }
 
@@ -171,6 +172,7 @@ pub async fn spawn_install(
         .ok_or_else(|| RxError::Other("no install command defined for this platform".into()))?;
     let cwd = resolve_cwd(&script_dir, install.cwd.as_deref());
     let mut command = build_base_command(&install, &script_dir);
+    apply_dotenv(&mut command, &script_dir);
     let dir_clone = script_dir.clone();
     let on_exit: BoxedExitHook = Box::new(move |code, cancelled| {
         if !cancelled && code == Some(0) {
@@ -207,6 +209,7 @@ pub async fn spawn_uninstall(
         .ok_or_else(|| RxError::Other("no uninstall command defined for this platform".into()))?;
     let cwd = resolve_cwd(&script_dir, uninstall.cwd.as_deref());
     let mut command = build_base_command(&uninstall, &script_dir);
+    apply_dotenv(&mut command, &script_dir);
     let dir_clone = script_dir.clone();
     let on_exit: BoxedExitHook = Box::new(move |code, cancelled| {
         if !cancelled && code == Some(0) {
@@ -221,6 +224,7 @@ pub async fn run_pre_run_sync(manifest: &Manifest, script_dir: &Path) -> Result<
     let Some(spec) = block.pre_run.clone() else { return Ok(()); };
     let cwd = resolve_cwd(script_dir, spec.cwd.as_deref());
     let mut cmd = build_base_command(&spec, script_dir);
+    apply_dotenv(&mut cmd, script_dir);
     cmd.current_dir(&cwd).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
     let output = cmd.output().await.map_err(|e| RxError::Other(format!("preRun failed to start: {e}")))?;
     if !output.status.success() {
@@ -580,3 +584,43 @@ fn scalar_to_string(value: &Value) -> String {
 }
 
 fn to_kebab(s: &str) -> String { s.replace('_', "-").to_lowercase() }
+
+/// Parse a `.env` file from the script directory (if it exists) and return
+/// the key-value pairs.
+pub(crate) fn load_dotenv(script_dir: &Path) -> Vec<(String, String)> {
+    let path = script_dir.join(".env");
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let mut pairs = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let trimmed = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+        if let Some((key, raw_value)) = trimmed.split_once('=') {
+            let key = key.trim().to_string();
+            if key.is_empty() {
+                continue;
+            }
+            let value = raw_value.trim();
+            let value = if (value.starts_with('"') && value.ends_with('"') && value.len() >= 2)
+                || (value.starts_with('\'') && value.ends_with('\'') && value.len() >= 2)
+            {
+                value[1..value.len() - 1].to_string()
+            } else {
+                value.to_string()
+            };
+            pairs.push((key, value));
+        }
+    }
+    pairs
+}
+
+fn apply_dotenv(command: &mut Command, script_dir: &Path) {
+    for (key, value) in load_dotenv(script_dir) {
+        command.env(&key, &value);
+    }
+}
