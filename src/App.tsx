@@ -10,10 +10,8 @@ import { ScriptDetail } from "./components/ScriptDetail";
 import { EMPTY_RUN, type RunSnapshot } from "./components/RunPanel";
 import {
   applyTheme,
-  clearScriptsRoot,
   getScriptsRoot,
   getTheme,
-  setScriptsRoot,
   setTheme,
   type ThemePreference,
 } from "./store";
@@ -191,14 +189,18 @@ function App() {
   }, []);
 
   const saveSettings = useCallback(async (newRoot: string, newConfig: import("./types/config").AppConfig) => {
-    await setScriptsRoot(newRoot);
+    const defaultRoot = await api.defaultScriptsRoot();
+    newConfig.scriptsRoot = newRoot === defaultRoot ? null : newRoot;
+    newConfig.theme = theme === "system" ? null : theme;
     await api.setConfig(newConfig);
     setRoot(newRoot);
     setShowSettings(false);
-  }, []);
+  }, [theme]);
 
   const resetSettings = useCallback(async () => {
-    await clearScriptsRoot();
+    const cfg = await api.getConfig();
+    cfg.scriptsRoot = null;
+    await api.setConfig(cfg);
     const def = await api.defaultScriptsRoot();
     setRoot(def);
     setShowSettings(false);
