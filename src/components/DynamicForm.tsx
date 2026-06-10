@@ -22,6 +22,9 @@ export interface FormValues {
 
 interface Props {
   manifest: Manifest;
+  /** Session-scoped persistence key (script dir): form values survive script
+   *  switches while the app is open, and reset when the app closes. */
+  cacheKey: string;
   disabled: boolean;
   /** Extra reason to disable just the "运行" button (form fields stay editable).
    *  Set to a string explaining why; rendered as the button's tooltip. */
@@ -29,14 +32,25 @@ interface Props {
   onSubmit: (values: FormValues) => void;
 }
 
-export function DynamicForm({ manifest, disabled, runDisabledReason, onSubmit }: Props) {
+export function DynamicForm({ manifest, cacheKey, disabled, runDisabledReason, onSubmit }: Props) {
   const defaults = useMemo(() => buildDefaults(manifest), [manifest]);
-  const methods = useForm<FormValues>({ defaultValues: defaults, mode: "onSubmit" });
+  const methods = useForm<FormValues>({
+    defaultValues: mergeWithDefaults(defaults, loadCached(cacheKey)),
+    mode: "onSubmit",
+  });
 
-  // Reset whenever manifest changes (selecting a different script)
+  // Reset whenever manifest changes (selecting a different script):
+  // restore that script's session cache if present, else its defaults.
   useEffect(() => {
-    methods.reset(defaults);
-  }, [defaults, methods]);
+    methods.reset(mergeWithDefaults(defaults, loadCached(cacheKey)));
+  }, [defaults, cacheKey, methods]);
+
+  // Mirror every edit into sessionStorage so values survive unmount /
+  // script switches for the lifetime of the app window.
+  useEffect(() => {
+    const sub = methods.watch((values) => saveCached(cacheKey, values as FormValues));
+    return () => sub.unsubscribe();
+  }, [methods, cacheKey]);
 
   const inputs = manifest.inputs ?? [];
   const outputs = manifest.outputs ?? [];
@@ -84,6 +98,44 @@ export function DynamicForm({ manifest, disabled, runDisabledReason, onSubmit }:
       </form>
     </FormProvider>
   );
+}
+
+const FORM_CACHE_PREFIX = "runnerx-form:";
+
+function loadCached(cacheKey: string): FormValues | null {
+  try {
+    const raw = sessionStorage.getItem(FORM_CACHE_PREFIX + cacheKey);
+    return raw ? (JSON.parse(raw) as FormValues) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCached(cacheKey: string, values: FormValues) {
+  try {
+    sessionStorage.setItem(FORM_CACHE_PREFIX + cacheKey, JSON.stringify(values));
+  } catch {
+    // 配额满或序列化失败时放弃缓存即可，不影响表单本身
+  }
+}
+
+/** 以 defaults 的字段集合为准、用缓存值覆盖：manifest 改过（增删字段）时，
+ *  新字段拿默认值，已删字段的缓存值被丢弃，不会混进提交结果。 */
+function mergeWithDefaults(defaults: FormValues, cached: FormValues | null): FormValues {
+  if (!cached) return defaults;
+  const pick = (def: Record<string, unknown>, c: Record<string, unknown> | undefined) => {
+    const out = { ...def };
+    if (c) {
+      for (const k of Object.keys(def)) {
+        if (k in c && c[k] !== undefined) out[k] = c[k];
+      }
+    }
+    return out;
+  };
+  return {
+    inputs: pick(defaults.inputs, cached.inputs),
+    outputs: pick(defaults.outputs, cached.outputs),
+  };
 }
 
 function buildDefaults(manifest: Manifest): FormValues {

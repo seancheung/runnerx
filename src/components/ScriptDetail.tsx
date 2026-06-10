@@ -168,6 +168,7 @@ export function ScriptDetail({
           {tab === "run" ? (
             <DynamicForm
               manifest={m}
+              cacheKey={script.dir}
               disabled={formDisabled}
               runDisabledReason={runDisabledReason}
               onSubmit={onStartRun}
