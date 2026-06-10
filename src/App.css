@@ -316,7 +316,8 @@ textarea {
   overflow-y: auto;
   padding: 16px 20px;
 }
-.form-pane { border-right: 1px solid var(--border); }
+.form-pane { border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.form-pane > .tabs { flex-shrink: 0; }
 
 .field {
   display: flex;
@@ -517,6 +518,54 @@ textarea {
   margin-bottom: -1px;
 }
 .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.env-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.env-textarea {
+  flex: 1;
+  min-height: 120px;
+  resize: none;
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elev);
+  color: var(--text);
+  tab-size: 4;
+}
+.env-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.env-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.env-actions button {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.env-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.env-hint code {
+  font-family: ui-monospace, "SF Mono", monospace;
+  background: var(--bg-elev-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
 
 .readme { font-size: 13px; line-height: 1.5; }
 .readme h1, .readme h2, .readme h3 { margin-top: 16px; }

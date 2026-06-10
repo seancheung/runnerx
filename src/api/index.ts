@@ -39,6 +39,14 @@ export async function readReadme(path: string): Promise<string> {
   return await invoke<string>("read_readme", { path });
 }
 
+export async function readDotenv(dir: string): Promise<string> {
+  return await invoke<string>("read_dotenv", { dir });
+}
+
+export async function writeDotenv(dir: string, content: string): Promise<void> {
+  await invoke("write_dotenv", { dir, content });
+}
+
 export async function runScript(
   scriptDir: string,
   inputs: Record<string, unknown>,

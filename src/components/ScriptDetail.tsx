@@ -22,16 +22,35 @@ interface Props {
 export function ScriptDetail({
   script, run, onStartRun, onStartInstall, onStartUninstall, onCancel, onAiEdit,
 }: Props) {
-  const [tab, setTab] = useState<"run" | "readme">("run");
+  const [tab, setTab] = useState<"run" | "env" | "readme">("run");
   const [readme, setReadme] = useState<string | null>(null);
+  const [envContent, setEnvContent] = useState("");
+  const [envSaved, setEnvSaved] = useState("");
+  const [envSaving, setEnvSaving] = useState(false);
 
   useEffect(() => {
     setTab("run");
     setReadme(null);
+    setEnvContent("");
+    setEnvSaved("");
+    api.readDotenv(script.dir).then((c) => { setEnvContent(c); setEnvSaved(c); }).catch(() => {});
     if (script.readmePath) {
       api.readReadme(script.readmePath).then(setReadme).catch(() => setReadme(null));
     }
   }, [script.dir, script.readmePath]);
+
+  const envDirty = envContent !== envSaved;
+  const saveEnv = async () => {
+    setEnvSaving(true);
+    try {
+      await api.writeDotenv(script.dir, envContent);
+      setEnvSaved(envContent);
+    } catch (e) {
+      console.error("save .env failed", e);
+    } finally {
+      setEnvSaving(false);
+    }
+  };
 
   const m = script.manifest;
   const isSandbox = !!m.sandbox;
@@ -143,6 +162,7 @@ export function ScriptDetail({
         <div className="form-pane">
           <div className="tabs">
             <div className={"tab" + (tab === "run" ? " active" : "")} onClick={() => setTab("run")}>参数</div>
+            <div className={"tab" + (tab === "env" ? " active" : "")} onClick={() => setTab("env")}>环境变量</div>
             {readme && <div className={"tab" + (tab === "readme" ? " active" : "")} onClick={() => setTab("readme")}>README</div>}
           </div>
           {tab === "run" ? (
@@ -152,6 +172,28 @@ export function ScriptDetail({
               runDisabledReason={runDisabledReason}
               onSubmit={onStartRun}
             />
+          ) : tab === "env" ? (
+            <div className="env-editor">
+              <textarea
+                className="env-textarea"
+                value={envContent}
+                onChange={(e) => setEnvContent(e.target.value)}
+                placeholder={"# 每行一个 KEY=VALUE\n# 支持 \"引号\" 和 export 前缀\n# 例如：\nAPI_KEY=sk-xxxx\nBASE_URL=\"https://api.example.com\""}
+                spellCheck={false}
+              />
+              <div className="env-actions">
+                <span className="env-hint">
+                  脚本目录下的 <code>.env</code> 文件，运行/安装/卸载时自动注入
+                </span>
+                <button
+                  className="primary"
+                  disabled={!envDirty || envSaving}
+                  onClick={saveEnv}
+                >
+                  {envSaving ? "保存中…" : "保存"}
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="readme">
               {readme && <ReactMarkdown remarkPlugins={[remarkGfm]}>{readme}</ReactMarkdown>}

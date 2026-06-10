@@ -167,6 +167,22 @@ pub fn read_readme(path: String) -> Result<String> {
 }
 
 #[tauri::command]
+pub fn read_dotenv(dir: String) -> Result<String> {
+    let path = PathBuf::from(dir).join(".env");
+    if path.is_file() {
+        Ok(std::fs::read_to_string(&path)?)
+    } else {
+        Ok(String::new())
+    }
+}
+
+#[tauri::command]
+pub fn write_dotenv(dir: String, content: String) -> Result<()> {
+    let path = PathBuf::from(dir).join(".env");
+    Ok(std::fs::write(&path, content.as_bytes())?)
+}
+
+#[tauri::command]
 pub async fn run_script(
     app: AppHandle,
     state: State<'_, Arc<RunnerState>>,
