@@ -71,7 +71,8 @@ pub enum RunMode {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+// rename_all 只重命名变体名，字段还需 rename_all_fields 才会变驼峰（前端按 runId 取）
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 #[serde(tag = "kind")]
 pub enum RunEvent {
     Started { run_id: String, mode: RunMode },
@@ -108,6 +109,13 @@ impl RunnerState {
 
 pub async fn current_run_id(state: &RunnerState) -> Option<String> {
     state.active.lock().await.as_ref().map(|r| r.id.clone())
+}
+
+async fn clear_active(state: &RunnerState, run_id: &str) {
+    let mut guard = state.active.lock().await;
+    if guard.as_ref().map(|r| r.id == run_id).unwrap_or(false) {
+        *guard = None;
+    }
 }
 
 pub async fn cancel(state: &RunnerState, run_id: &str) -> Result<()> {
@@ -250,13 +258,6 @@ pub(crate) async fn spawn_event_stream(
     // that's what it sees, but the frontend needs host paths to reveal the file.
     result_path_map: Option<HashMap<String, String>>,
 ) -> Result<String> {
-    {
-        let guard = state.active.lock().await;
-        if guard.is_some() {
-            return Err(RxError::Other("another run is already in progress".into()));
-        }
-    }
-
     command
         .current_dir(cwd)
         .stdout(Stdio::piped())
@@ -273,15 +274,30 @@ pub(crate) async fn spawn_event_stream(
     let (kill_tx, mut kill_rx) = tokio::sync::mpsc::channel::<()>(1);
     {
         let mut guard = state.active.lock().await;
+        if guard.is_some() {
+            return Err(RxError::Other("another run is already in progress".into()));
+        }
         *guard = Some(ActiveRun { id: run_id.clone(), kill_tx });
     }
 
-    let mut child = command.spawn().map_err(|e| {
-        RxError::Other(format!("spawn failed: {e}"))
-    })?;
+    // active run 在 spawn 之前注册（cancel 需要能找到 kill_tx），所以这里的
+    // 每条错误路径都必须把它清掉，否则后续运行永远报 "already in progress"。
+    let mut child = match command.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            clear_active(&state, &run_id).await;
+            return Err(RxError::Other(format!("spawn failed: {e}")));
+        }
+    };
     let child_pid = child.id();
-    let stdout = child.stdout.take().ok_or_else(|| RxError::Other("no stdout".into()))?;
-    let stderr = child.stderr.take().ok_or_else(|| RxError::Other("no stderr".into()))?;
+    let (stdout, stderr) = match (child.stdout.take(), child.stderr.take()) {
+        (Some(out), Some(err)) => (out, err),
+        _ => {
+            let _ = child.start_kill();
+            clear_active(&state, &run_id).await;
+            return Err(RxError::Other("no stdout/stderr".into()));
+        }
+    };
 
     if let Some(payload) = stdin_payload {
         if let Some(mut stdin) = child.stdin.take() {
@@ -344,10 +360,7 @@ pub(crate) async fn spawn_event_stream(
             RunEvent::Exit { run_id: id_for_wait.clone(), code, cancelled, mode },
         );
 
-        let mut guard = state_for_wait.active.lock().await;
-        if guard.as_ref().map(|r| r.id == id_for_wait).unwrap_or(false) {
-            *guard = None;
-        }
+        clear_active(&state_for_wait, &id_for_wait).await;
     });
 
     Ok(run_id)
